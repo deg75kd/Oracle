@@ -1,0 +1,45 @@
+############# SQL Profiles #####################
+
+-- idevp (uxs33)
+set lines 150 pages 200
+set serveroutput on
+col name format a30
+select name, type, status, to_char(created,'MM/DD/RR') "CREATED", to_char(last_modified,'MM/DD/RR') "MODIFIED"
+from dba_sql_profiles order by 1;
+57
+
+EXEC DBMS_SQLTUNE.CREATE_STGTAB_SQLPROF ('PROFILE_STGTAB', 'GGTEST', 'GGS');
+EXEC DBMS_SQLTUNE.PACK_STGTAB_SQLPROF (profile_category => '%', staging_table_name => 'PROFILE_STGTAB', staging_schema_owner => 'GGTEST');
+
+-- uxs33
+expdp \"/ as sysdba\" DIRECTORY=CNO_MIGRATE DUMPFILE=PROFILE_STGTAB.dmp LOGFILE=PROFILE_STGTAB_exp.log CONTENT=ALL TABLES=GGTEST.PROFILE_STGTAB
+
+scp /backup_uxs33/dpdump/datapump/idevp/PROFILE_STGTAB.dmp lxora12cinfs02:/database/oragg/datapump/idevp
+
+-- lxora12cinfs02
+sudo su -
+chmod 777 /database/oragg/datapump/idevp/PROFILE_STGTAB.dmp
+impdp \"system@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=LXORA12CINFS02.conseco.ad)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=idevp)))\" DIRECTORY=CNO_MIGRATE DUMPFILE=PROFILE_STGTAB.dmp LOGFILE=PROFILE_STGTAB_imp.log CONTENT=ALL
+
+-- idevp (lxora12cinfs02)
+alter session set container=idevp;
+set lines 150 pages 200
+set serveroutput on
+
+select count(*) from dba_sql_profiles;
+0
+
+select count(*) from GGTEST.PROFILE_STGTAB;
+57
+
+EXEC DBMS_SQLTUNE.UNPACK_STGTAB_SQLPROF(replace => TRUE, staging_table_name => 'PROFILE_STGTAB', staging_schema_owner => 'GGTEST');
+
+select count(*) from dba_sql_profiles;
+57
+
+NAME                           TYPE    STATUS   CREATED  MODIFIED
+------------------------------ ------- -------- -------- --------
+SYS_SQLPROF_0138b0be13cd0000   AUTO    ENABLED  04/18/18 04/18/18
+SYS_SQLPROF_0138b0be428b0001   AUTO    ENABLED  04/18/18 04/18/18
+SYS_SQLPROF_0138b6bc22100002   AUTO    ENABLED  04/18/18 04/18/18
+...

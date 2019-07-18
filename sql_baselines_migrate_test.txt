@@ -1,0 +1,120 @@
+############# SQL Plan Management #####################
+
+-- idevp (uxs33)
+set lines 150 pages 200
+col sql_handle format a30
+col plan_name format a30
+col sql_text format a40
+select sql_handle, plan_name, origin, enabled, accepted, fixed, autopurge, to_char(last_modified,'MM/DD/RR') "MODIFIED", to_char(last_executed,'MM/DD/RR') "EXECUTED"
+from dba_sql_plan_baselines
+where enabled='YES' and accepted='YES'
+order by 1;
+1521 rows selected.
+
+select min(last_modified) from dba_sql_plan_baselines where enabled='YES' and accepted='YES';
+MIN(LAST_MODIFIED)
+---------------------------------------------------------------------------
+17-JAN-16 01.08.04.000000 AM
+
+
+-- idevp (lxora12cinfs02)
+626 rows selected.
+
+MIN(LAST_MODIFIED)
+---------------------------------------------------------------------------
+05-APR-18 05.47.30.000000 PM
+
+
+-- idevp (uxs33)
+set serveroutput on
+exec DBMS_SPM.CREATE_STGTAB_BASELINE ('STGTAB_BASELINE','GGTEST','GGS');
+
+select count(*) from GGTEST.STGTAB_BASELINE;
+0
+
+declare
+	my_plans	pls_integer;
+begin
+	my_plans := DBMS_SPM.PACK_STGTAB_BASELINE (
+		table_name	=> 'STGTAB_BASELINE',
+		table_owner	=> 'GGTEST',
+		enabled		=> 'YES',
+		accepted	=> 'YES');
+	dbms_output.put_line('Plans loaded: '||my_plans);
+end;
+/
+
+select count(*) from GGTEST.STGTAB_BASELINE;
+1521
+(matches above)
+
+-- uxs33
+expdp \"/ as sysdba\" DIRECTORY=CNO_MIGRATE DUMPFILE=STGTAB_BASELINE.dmp LOGFILE=STGTAB_BASELINE_exp.log CONTENT=ALL TABLES=GGTEST.STGTAB_BASELINE
+
+scp /backup_uxs33/dpdump/datapump/idevp/STGTAB_BASELINE.dmp lxora12cinfs02:/database/oragg/datapump/idevp
+
+-- lxora12cinfs02
+sudo su -
+chmod 777 /database/oragg/datapump/idevp/STGTAB_BASELINE.dmp
+impdp \"system@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=LXORA12CINFS02.conseco.ad)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=idevp)))\" DIRECTORY=CNO_MIGRATE DUMPFILE=STGTAB_BASELINE.dmp LOGFILE=STGTAB_BASELINE_imp.log CONTENT=ALL
+
+-- idevp (lxora12cinfs02)
+alter session set container=idevp;
+set lines 150 pages 200
+set serveroutput on
+
+select count(*) from GGTEST.STGTAB_BASELINE;
+1521
+
+select count(*) from dba_sql_plan_baselines where enabled='YES' and accepted='YES';
+626
+
+DBMS_SPM.UNPACK_STGTAB_BASELINE (
+   table_name       IN VARCHAR2,
+   table_owner      IN VARCHAR2 := NULL,
+   sql_handle       IN VARCHAR2 := NULL,
+   plan_name        IN VARCHAR2 := NULL,
+   sql_text         IN CLOB     := NULL,
+   creator          IN VARCHAR2 := NULL,   origin           IN VARCHAR2 := NULL,
+   enabled          IN VARCHAR2 := NULL,
+   accepted         IN VARCHAR2 := NULL,
+   fixed            IN VARCHAR2 := NULL,
+   module           IN VARCHAR2 := NULL,
+   action           IN VARCHAR2 := NULL)
+RETURN NUMBER;
+
+DECLARE
+	my_plans	number;
+BEGIN
+	my_plans := DBMS_SPM.UNPACK_STGTAB_BASELINE(
+		table_name	=> 'STGTAB_BASELINE',
+		table_owner	=> 'GGTEST'
+	);
+	dbms_output.put_line('Plans unloaded: '||my_plans);
+END;
+/
+Plans unloaded: 1521
+PL/SQL procedure successfully completed.
+
+select count(*) from dba_sql_plan_baselines where enabled='YES' and accepted='YES';
+1624
+
+select count(*) from dba_sql_plan_baselines where enabled='YES' and accepted='YES' and last_modified>(sysdate-1/24);
+1523
+
+col sql_handle format a30
+col plan_name format a30
+col sql_text format a40
+select sql_handle, plan_name, origin, enabled, accepted, fixed, autopurge, to_char(last_modified,'MM/DD/RR') "MODIFIED", to_char(last_executed,'MM/DD/RR') "EXECUTED"
+from dba_sql_plan_baselines
+where enabled='YES' and accepted='YES'
+order by 1;
+SQL_HANDLE                     PLAN_NAME                      ORIGIN         ENA ACC FIX AUT MODIFIED EXECUTED
+------------------------------ ------------------------------ -------------- --- --- --- --- -------- --------
+SQL_f8d38e0d3d1d3a62           SQL_PLAN_gjnwf1nyjufm2d87d0144 AUTO-CAPTURE   YES YES NO  YES 04/18/18
+SQL_f8da28019f0615ff           SQL_PLAN_gjqj806ghc5gz3b90eb94 AUTO-CAPTURE   YES YES NO  YES 04/18/18
+SQL_f93da30bf1f2b6a5           SQL_PLAN_gkgd31gsz5dp57d755bfe AUTO-CAPTURE   YES YES NO  YES 04/18/18
+SQL_f9469abba04cce34           SQL_PLAN_gkjnurfh4tmjn1b4f8f21 AUTO-CAPTURE   YES YES NO  YES 04/18/18
+SQL_f960ca3d1a5732c9           SQL_PLAN_gks6a7nd5fcq9fd47cf39 AUTO-CAPTURE   YES YES NO  YES 04/18/18
+SQL_f97619b5cd5d6505           SQL_PLAN_gkxhtqr6put854bbae5a1 AUTO-CAPTURE   YES YES NO  YES 04/12/18 04/12/18
+...

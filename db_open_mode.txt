@@ -1,0 +1,156 @@
+##############
+### closed ###
+##############
+
+SQL> select open_mode from v$database;
+select open_mode from v$database
+*
+ERROR at line 1:
+ORA-01034: ORACLE not available
+
+
+startup;
+
+
+SQL> startup nomount
+ORACLE instance started.
+
+Total System Global Area  692060160 bytes
+Fixed Size		    2928152 bytes
+Variable Size		  633340392 bytes
+Database Buffers	   50331648 bytes
+Redo Buffers		    5459968 bytes
+
+
+SQL> alter database mount;
+alter database mount
+*
+ERROR at line 1:
+ORA-01034: ORACLE not available
+
+
+SQL> alter database open;
+alter database open
+*
+ERROR at line 1:
+ORA-01034: ORACLE not available
+
+
+SQL> startup mount force;
+ORACLE instance started.
+
+Total System Global Area  838860800 bytes
+Fixed Size		    2929936 bytes
+Variable Size		  624954096 bytes
+Database Buffers	  205520896 bytes
+Redo Buffers		    5455872 bytes
+Database mounted.
+
+
+
+#################
+### unmounted ###
+#################
+
+SQL> select open_mode from v$database;
+select open_mode from v$database
+                      *
+ERROR at line 1:
+ORA-01507: database not mounted
+
+
+SQL> startup;
+ORA-01081: cannot start already-running ORACLE - shut it down first
+
+
+SQL> alter database mount;
+
+Database altered.
+
+
+SQL> alter database open;
+alter database open
+*
+ERROR at line 1:
+ORA-01507: database not mounted
+
+
+###############
+### mounted ###
+###############
+
+SQL> select open_mode from v$database;
+
+OPEN_MODE
+--------------------
+MOUNTED
+
+
+SQL> startup;
+ORA-01081: cannot start already-running ORACLE - shut it down first
+
+
+SQL> alter database mount;
+alter database mount
+*
+ERROR at line 1:
+ORA-01100: database already mounted
+
+
+SQL> alter database open;
+
+Database altered.
+
+
+SQL> startup force;       
+ORACLE instance started.
+
+Total System Global Area  838860800 bytes
+Fixed Size		    2929936 bytes
+Variable Size		  624954096 bytes
+Database Buffers	  205520896 bytes
+Redo Buffers		    5455872 bytes
+Database mounted.
+Database opened.
+
+
+############
+### open ###
+############
+
+SQL> select open_mode from v$database;
+
+OPEN_MODE
+--------------------
+READ WRITE
+
+
+SQL> startup;
+ORA-01081: cannot start already-running ORACLE - shut it down first
+
+
+SQL> alter database mount;
+alter database mount
+*
+ERROR at line 1:
+ORA-01100: database already mounted
+
+
+SQL> alter database open;
+alter database open
+*
+ERROR at line 1:
+ORA-01531: a database already open by the instance
+
+
+SQL> startup mount force;
+ORACLE instance started.
+
+Total System Global Area  838860800 bytes
+Fixed Size		    2929936 bytes
+Variable Size		  624954096 bytes
+Database Buffers	  205520896 bytes
+Redo Buffers		    5455872 bytes
+Database mounted.
+
+

@@ -1,0 +1,291 @@
+/*****************************/
+/* CREATE DQIDWDEVB DATABASE */
+/*****************************/
+
+-- #########################
+-- # Setup the environment #
+-- #########################
+-- DB_NAME set to DQIDWDVB due to 8 char limit
+
+-- Specify Environment Variables
+set oracle_sid=DQIDWDVB
+set oracle_home=D:\Oracle\Product\11.2.0\dbhome_11203
+
+-- Choose Authentication Method
+orapwd FILE=D:\oracle\product\11.2.0\dbhome_11203\database\PWDdqidwdvb.ora
+-- copy to config folder
+
+-- Create the Initialization Parameter File
+-- created from dqisde
+create pfile='D:\oracle\product\11.2.0\dbhome_11203\database\initDQIDWDEVB.ora' from spfile;
+-- moved to D:\oradata\DEVB\config
+
+-- Create an Instance on all servers
+oradim -NEW -SID DQIDWDVB -STARTMODE MANUAL -pfile D:\oradata\DEVB\config\initDQIDWDVB.ora
+
+-- Connect to the Instance
+sqlplus sys as sysdba
+
+-- Create a Server Parameter File
+CREATE SPFILE FROM PFILE='D:\oradata\DEVB\config\initDQIDWDEVB.ora';
+
+-- Move spfile to config folder
+-- Create pointer init file
+-- Copy pointer file to default folder
+
+-- Start the Instance 
+startup nomount;
+
+-- changed names of param files to dqidwdvb
+
+-- #######################
+-- # Create the database #
+-- #######################
+
+-- Issue the CREATE DATABASE Statement
+SET DEFINE ON
+CREATE DATABASE DQIDWDVB
+   USER SYS IDENTIFIED BY &sys_pwd
+   USER SYSTEM IDENTIFIED BY &system_pwd
+   LOGFILE GROUP 1 ('D:\oradata\DEVB\DQIDW\redo_01\redo01.log') SIZE 2G BLOCKSIZE 512,
+           GROUP 2 ('D:\oradata\DEVB\DQIDW\redo_01\redo02.log') SIZE 2G BLOCKSIZE 512,
+           GROUP 3 ('D:\oradata\DEVB\DQIDW\redo_01\redo03.log') SIZE 2G BLOCKSIZE 512,
+           GROUP 4 ('D:\oradata\DEVB\DQIDW\redo_01\redo04.log') SIZE 2G BLOCKSIZE 512
+   MAXLOGFILES 16
+   MAXLOGMEMBERS 3
+   MAXLOGHISTORY 2484
+   MAXDATAFILES 800
+   MAXINSTANCES 8
+   CHARACTER SET WE8MSWIN1252
+   NATIONAL CHARACTER SET AL16UTF16
+   EXTENT MANAGEMENT LOCAL
+   DATAFILE 'D:\oradata\DEVB\DQIDW\data_01\SYSTEM01.DBF' 
+      SIZE 512M AUTOEXTEND ON NEXT 512M MAXSIZE 8G
+   SYSAUX DATAFILE 'D:\oradata\DEVB\DQIDW\data_01\SYSAUX01.DBF'
+      SIZE 512M AUTOEXTEND ON NEXT 512M MAXSIZE 16G
+   DEFAULT TABLESPACE users
+      DATAFILE 'D:\oradata\DEVB\DQIDW\data_01\USERS01.DBF'
+      SIZE 100M REUSE AUTOEXTEND ON NEXT 100M MAXSIZE 4G
+   DEFAULT TEMPORARY TABLESPACE temp
+      TEMPFILE 'D:\oradata\DEVB\DQIDW\data_01\TEMP01.DBF'
+      SIZE 8G REUSE
+   UNDO TABLESPACE undotbs1
+      DATAFILE 'D:\oradata\DEVB\DQIDW\data_01\UNDOTBS1_001.DBF'
+      SIZE 8G REUSE;
+
+-- Build Data Dictionary Views
+@D:\Oracle\Product\11.2.0\dbhome_11203\RDBMS\ADMIN\catalog.sql
+@D:\Oracle\Product\11.2.0\dbhome_11203\RDBMS\ADMIN\catproc.sql
+
+-- run in by SYSTEM
+@D:\Oracle\Product\11.2.0\dbhome_11203\sqlplus\admin\pupbld.sql
+
+
+-- ############
+-- # Listener #
+-- ############
+
+-- Add new entry to listener (11GGDEDWListener) & copy to all DB servers
+-- Start listener on all DB servers
+
+-- Add new entry to tnsnames & copy to all DB servers
+
+
+-- #################################
+-- # Create Additional Tablespaces #
+-- #################################
+
+CREATE TABLESPACE "DQIDW_X128K" DATAFILE
+  'D:\oradata\DEVB\DQIDW\data_01\DQIDW_X128K01.DBF' SIZE 128M AUTOEXTEND ON NEXT 128M MAXSIZE 16G,
+  'D:\oradata\DEVB\DQIDW\data_01\DQIDW_X128K02.DBF' SIZE 128M AUTOEXTEND ON NEXT 128M MAXSIZE 16G
+ LOGGING ONLINE PERMANENT BLOCKSIZE 8192
+ EXTENT MANAGEMENT LOCAL UNIFORM SIZE 128K DEFAULT
+NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO;
+
+CREATE TABLESPACE "DQIDW_X4M" DATAFILE
+ 'D:\ORADATA\DEVB\DQI\DATA\DQIDW_X4M01.DBF' SIZE 256M AUTOEXTEND ON NEXT 256M MAXSIZE 16G,
+ 'D:\ORADATA\DEVB\DQI\DATA\DQIDW_X4M02.DBF' SIZE 256M AUTOEXTEND ON NEXT 256M MAXSIZE 16G
+ LOGGING ONLINE PERMANENT BLOCKSIZE 8192
+ EXTENT MANAGEMENT LOCAL UNIFORM SIZE 4M DEFAULT
+NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO;
+
+
+-- ################
+-- # Install Java #
+-- ################
+
+spool D:\DBA\Kevin\full_jvminst_dqidwdevb.log;
+
+set echo on
+@D:\Oracle\Product\11.2.0\dbhome_11203\javavm\install\initjvm.sql
+
+select count(*), object_type from all_objects
+where object_type like '%JAVA%' group by object_type;
+
+@D:\Oracle\Product\11.2.0\dbhome_11203\xdk\admin\initxml.sql
+
+select count(*), object_type from all_objects
+where object_type like '%JAVA%' group by object_type;
+
+@D:\Oracle\Product\11.2.0\dbhome_11203\xdk\admin\xmlja.sql
+
+select count(*), object_type from all_objects
+where object_type like '%JAVA%' group by object_type;
+
+@D:\Oracle\Product\11.2.0\dbhome_11203\rdbms\admin\catjava.sql
+
+select count(*), object_type from all_objects
+where object_type like '%JAVA%' group by object_type;
+
+@D:\Oracle\Product\11.2.0\dbhome_11203\rdbms\admin\catexf.sql
+
+select count(*), object_type from all_objects
+where object_type like '%JAVA%' group by object_type;
+
+spool off
+
+
+-- ###############
+-- # Install XML #
+-- ###############
+
+spool D:\DBA\Kevin\xmldb_install_dqidwdevb.log
+
+@D:\Oracle\Product\11.2.0\dbhome_11203\rdbms\admin\catqm.sql change_on_install SYSAUX TEMP NO
+
+spool off
+exit
+
+-- find errors
+findstr /B /N "ORA-" D:\DBA\Kevin\full_jvminst_dqidwdevb.log
+findstr /B /N "SP2-" D:\DBA\Kevin\full_jvminst_dqidwdevb.log
+findstr /B /N "ORA-" D:\DBA\Kevin\xmldb_install_dqidwdevb.log
+findstr /B /N "SP2-" D:\DBA\Kevin\xmldb_install_dqidwdevb.log
+
+
+-- ################
+-- # Create Roles #
+-- ################
+
+-- plustrace
+@D:\Oracle\Product\11.2.0\dbhome_11203\sqlplus\admin\plustrce.sql
+@D:\Oracle\Product\11.2.0\dbhome_11203\RDBMS\ADMIN\utlxplan.sql
+
+-- reporting
+
+
+-- ################
+-- # Create Users #
+-- ################
+
+-- DW
+CREATE USER DW IDENTIFIED BY &dwpwd
+DEFAULT TABLESPACE DQIDW_X128K
+TEMPORARY TABLESPACE TEMP
+PROFILE DEFAULT;
+
+GRANT PLUSTRACE TO DW;
+--GRANT REPORTING TO DW;
+GRANT SELECT_CATALOG_ROLE TO DW;
+--GRANT CONFIG TO DW;
+
+ALTER USER DW DEFAULT ROLE PLUSTRACE;
+--ALTER USER DW DEFAULT ROLE REPORTING;
+ALTER USER DW DEFAULT ROLE SELECT_CATALOG_ROLE;
+--ALTER USER DW DEFAULT ROLE CONFIG;
+
+ALTER USER DW QUOTA UNLIMITED ON DQIDW_X128K;
+ALTER USER DW QUOTA UNLIMITED ON DQIDW_X4M;
+
+GRANT ADMINISTER DATABASE TRIGGER TO DW;
+GRANT ALTER SESSION TO DW;
+GRANT ALTER USER TO DW;
+GRANT CREATE ANY CONTEXT TO DW;
+GRANT CREATE ANY SYNONYM TO DW;
+GRANT CREATE EVALUATION CONTEXT TO DW;
+GRANT CREATE JOB TO DW;
+GRANT CREATE MATERIALIZED VIEW TO DW;
+GRANT CREATE PROCEDURE TO DW;
+GRANT CREATE PUBLIC SYNONYM TO DW;
+GRANT CREATE ROLE TO DW;
+GRANT CREATE RULE SET TO DW;
+GRANT CREATE RULE TO DW;
+GRANT CREATE SEQUENCE TO DW;
+GRANT CREATE SESSION TO DW WITH ADMIN OPTION;
+GRANT CREATE SYNONYM TO DW;
+GRANT CREATE TABLE TO DW WITH ADMIN OPTION;
+GRANT CREATE TRIGGER TO DW;
+GRANT CREATE TYPE TO DW;
+GRANT CREATE USER TO DW;
+GRANT CREATE VIEW TO DW;
+GRANT DROP ANY SYNONYM TO DW;
+GRANT DROP PUBLIC SYNONYM TO DW;
+
+GRANT SELECT  ON sys.v_$session_longops TO dw;
+GRANT EXECUTE ON sys.dbms_aq TO dw;
+GRANT EXECUTE ON sys.dbms_aqadm TO dw;
+GRANT EXECUTE ON sys.dbms_aq_bqview TO dw;
+GRANT EXECUTE ON sys.dbms_rls TO dw;
+GRANT EXECUTE ON sys.dbms_scheduler TO dw;
+GRANT EXECUTE ON sys.dbms_lock TO dw;
+GRANT EXECUTE ON sys.dbms_shared_pool TO dw;             
+
+-- DWRO
+CREATE USER DWRO IDENTIFIED BY &dwropwd 
+DEFAULT TABLESPACE USERS 
+TEMPORARY TABLESPACE TEMP 
+PROFILE DEFAULT;
+
+-- GRANT SELECT_CATALOG_ROLE TO DWRO;
+-- ALTER USER DWRO DEFAULT ROLE SELECT_CATALOG_ROLE;
+-- ALTER USER DWRO QUOTA UNLIMITED ON USERS;
+
+GRANT CREATE SESSION TO DWRO;
+
+
+-- DQIDWCONFIG
+CREATE USER DQIDWCONFIG IDENTIFIED BY &dqidwconfigpwd
+DEFAULT TABLESPACE USERS 
+TEMPORARY TABLESPACE TEMP
+PROFILE DEFAULT;
+
+ALTER USER DQIDWCONFIG QUOTA UNLIMITED ON USERS;
+
+GRANT CREATE SESSION TO DQIDWCONFIG;
+
+
+-- DQI
+CREATE USER DQI IDENTIFIED BY &dqipwd
+DEFAULT TABLESPACE USERS 
+TEMPORARY TABLESPACE TEMP
+PROFILE DEFAULT;
+
+GRANT CREATE SESSION TO DQI;
+
+
+-- ###########
+-- # DB LINK #
+-- ###########
+
+-- as DW
+CREATE DATABASE LINK acturis
+CONNECT TO actro IDENTIFIED BY &actropwd
+USING 'ACTDEVB';
+
+-- ##########################
+-- # REPLACEMENT TABLESPACE #
+-- ##########################
+
+-- I created this on the wrong disk
+-- DB started in mount mode
+alter database datafile 'D:\ORADATA\DEVB\DQI\DATA\DQIDW_X4M01.DBF' offline drop;
+alter database datafile 'D:\ORADATA\DEVB\DQI\DATA\DQIDW_X4M02.DBF' offline drop;
+alter database open;
+drop TABLESPACE "DQIDW_X4M" including contents;
+
+CREATE TABLESPACE "DQIDW_X4M" DATAFILE
+ 'D:\oradata\DEVB\DQIDW\data_01\DQIDW_X4M01.DBF' SIZE 256M AUTOEXTEND ON NEXT 256M MAXSIZE 16G,
+ 'D:\oradata\DEVB\DQIDW\data_01\DQIDW_X4M02.DBF' SIZE 256M AUTOEXTEND ON NEXT 256M MAXSIZE 16G
+ LOGGING ONLINE PERMANENT BLOCKSIZE 8192
+ EXTENT MANAGEMENT LOCAL UNIFORM SIZE 4M DEFAULT
+NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO;

@@ -1,0 +1,452 @@
+/*****************************/
+/* RECREATE ACTGDE DATABASE  */
+/*****************************/
+
+-- #######################
+-- # Create the database #
+-- #######################
+
+-- Start the Instance 
+startup nomount;
+
+-- Issue the CREATE DATABASE Statement
+SET DEFINE ON
+CREATE DATABASE ACTGDE
+   USER SYS IDENTIFIED BY &sys_pwd
+   USER SYSTEM IDENTIFIED BY &system_pwd
+   LOGFILE GROUP 1 ('D:\ORADATA\GDE_DW3\DW3\REDO\redo01.log') SIZE 2G BLOCKSIZE 512,
+           GROUP 2 ('D:\ORADATA\GDE_DW3\DW3\REDO\redo02.log') SIZE 2G BLOCKSIZE 512,
+           GROUP 3 ('D:\ORADATA\GDE_DW3\DW3\REDO\redo03.log') SIZE 2G BLOCKSIZE 512,
+           GROUP 4 ('D:\ORADATA\GDE_DW3\DW3\REDO\redo04.log') SIZE 2G BLOCKSIZE 512,
+           GROUP 5 ('D:\ORADATA\GDE_DW3\DW3\REDO\redo05.log') SIZE 2G BLOCKSIZE 512
+   MAXLOGFILES 16
+   MAXLOGMEMBERS 3
+   MAXLOGHISTORY 2484
+   MAXDATAFILES 800
+   MAXINSTANCES 8
+   CHARACTER SET WE8MSWIN1252
+   NATIONAL CHARACTER SET AL16UTF16
+   EXTENT MANAGEMENT LOCAL
+   DATAFILE 'D:\ORADATA\GDE\ACTURIS\ORACLE\ACTURIS9\DATA_02\SYSTEM01.DBF' SIZE 262144000
+   SYSAUX DATAFILE 'D:\ORADATA\GDE_DW3\DW3\GENERAL\SYSAUX01.DBF'
+      SIZE 512M AUTOEXTEND ON NEXT 512M MAXSIZE 16G
+   DEFAULT TABLESPACE users
+      DATAFILE 'D:\ORADATA\GDE_DW3\DW3\GENERAL\USERS01.DBF'
+      SIZE 100M REUSE AUTOEXTEND ON NEXT 100M MAXSIZE 4G
+   DEFAULT TEMPORARY TABLESPACE temp
+      TEMPFILE 'D:\ORADATA\GDE_DW3\DW3\GENERAL\TEMP01.DBF'
+      SIZE 8G REUSE
+   UNDO TABLESPACE undotbs2
+      DATAFILE 'D:\ORADATA\GDE_DW3\DW3\UNDO\UNDOTBS2_001.DBF'
+      SIZE 8G REUSE;
+
+-- Build Data Dictionary Views
+@D:\Oracle\Product\11.2.0\dbhome_11203\RDBMS\ADMIN\catalog.sql
+@D:\Oracle\Product\11.2.0\dbhome_11203\RDBMS\ADMIN\catproc.sql
+
+-- run in by SYSTEM
+@D:\Oracle\Product\11.2.0\dbhome_11203\sqlplus\admin\pupbld.sql
+
+
+-- ############
+-- # Listener #
+-- ############
+
+-- Add new entry to listener (11GGDEDWListener) & copy to all DB servers
+-- Start listener on all DB servers
+
+-- Add new entry to tnsnames & copy to all DB servers
+
+
+-- #################################
+-- # Create Additional Tablespaces #
+-- #################################
+
+CREATE TABLESPACE CDC_ADMIN_X1M DATAFILE
+  'D:\oradata\GDE_DW3\dw3\General\CDC_ADMIN_X1M01.DBF' SIZE 104857600
+  AUTOEXTEND ON NEXT 1073741824 MAXSIZE 8G
+  LOGGING ONLINE PERMANENT BLOCKSIZE 8192
+  EXTENT MANAGEMENT LOCAL UNIFORM SIZE 1048576 DEFAULT
+ NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO;
+
+CREATE TABLESPACE CDC_PUBLISHER_X1M DATAFILE
+  'D:\oradata\GDE_DW3\dw3\CTs\CDC_PUBLISHER_X1M01.DBF' SIZE 209715200
+  AUTOEXTEND ON NEXT 209715200 MAXSIZE 16384M
+  LOGGING ONLINE PERMANENT BLOCKSIZE 8192
+  EXTENT MANAGEMENT LOCAL UNIFORM SIZE 1048576 DEFAULT
+ NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO;
+
+CREATE TABLESPACE CDC_SUBSCRIBER_X128K DATAFILE
+  'D:\ORADATA\GDE_DW3\DW3\CTS\CDC_SUBSCRIBER_X128K01.DBF' SIZE 52428800
+  AUTOEXTEND ON NEXT 52428800 MAXSIZE 1G
+  LOGGING ONLINE PERMANENT BLOCKSIZE 8192
+  EXTENT MANAGEMENT LOCAL UNIFORM SIZE 131072 DEFAULT
+ NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO;
+
+CREATE TABLESPACE DW3_GENERAL_X1M DATAFILE
+  'D:\ORADATA\GDE_DW3\DW3\GENERAL\DW3_GENERAL_X1M01.DBF' SIZE 104857600
+  AUTOEXTEND ON NEXT 1073741824 MAXSIZE 16384M
+  LOGGING ONLINE PERMANENT BLOCKSIZE 8192
+  EXTENT MANAGEMENT LOCAL UNIFORM SIZE 1048576 DEFAULT
+ NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO;
+
+CREATE TABLESPACE DW3_L1_X128K DATAFILE
+  'D:\ORADATA\GDE_DW3\DW3\DW3_L1\DW3_L1_X128K01.DBF' SIZE 104857600
+  AUTOEXTEND ON NEXT 1073741824 MAXSIZE 4G
+  LOGGING ONLINE PERMANENT BLOCKSIZE 8192
+  EXTENT MANAGEMENT LOCAL UNIFORM SIZE 131072 DEFAULT
+ NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO;
+
+CREATE TABLESPACE DW3_L2_X4M DATAFILE
+  'D:\ORADATA\GDE_DW3\DW3\DW3_L2\DW3_L2_X4M001.DBF' SIZE 524288000
+  AUTOEXTEND ON NEXT 268435456 MAXSIZE 16384M,
+  'D:\ORADATA\GDE_DW3\DW3\DW3_L2\DW3_L2_X4M002.DBF' SIZE 524288000
+  AUTOEXTEND ON NEXT 268435456 MAXSIZE 16384M,
+  'D:\ORADATA\GDE_DW3\DW3\DW3_L2\DW3_L2_X4M003.DBF' SIZE 524288000
+  AUTOEXTEND ON NEXT 268435456 MAXSIZE 16384M,
+  'D:\ORADATA\GDE_DW3\DW3\DW3_L2\DW3_L2_X4M004.DBF' SIZE 524288000
+  AUTOEXTEND ON NEXT 268435456 MAXSIZE 16384M
+  LOGGING ONLINE PERMANENT BLOCKSIZE 8192
+  EXTENT MANAGEMENT LOCAL UNIFORM SIZE 4194304 DEFAULT
+ NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO;
+
+CREATE TABLESPACE DW3_L3_X4M DATAFILE
+ 'D:\ORADATA\GDE_DW3\DW3\DW3_L3\DW3_L3_X4M01.DBF' SIZE 209715200
+ AUTOEXTEND ON NEXT 1073741824 MAXSIZE 16384M,
+ 'D:\ORADATA\GDE_DW3\DW3\DW3_L3\DW3_L3_X4M02.DBF' SIZE 209715200
+ AUTOEXTEND ON NEXT 1073741824 MAXSIZE 16384M
+  LOGGING ONLINE PERMANENT BLOCKSIZE 8192
+  EXTENT MANAGEMENT LOCAL UNIFORM SIZE 4194304 DEFAULT
+ NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO;
+
+CREATE TABLESPACE DW3_L4_X4M DATAFILE
+  'D:\ORADATA\GDE_DW3\DW3\DW3_L4\DW3_L4_X4M01.DBF' SIZE 104857600
+  AUTOEXTEND ON NEXT 1073741824 MAXSIZE 4G
+  LOGGING ONLINE PERMANENT BLOCKSIZE 8192
+  EXTENT MANAGEMENT LOCAL UNIFORM SIZE 4194304 DEFAULT
+ NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO;
+
+CREATE TABLESPACE DW3_MV_16KBLK_X4M DATAFILE
+  'D:\ORADATA\GDE_DW3\DW3\DW3_MV\DW3_MV_16KBLK_X4M001.DBF' SIZE 104857600
+  AUTOEXTEND ON NEXT 2147483648 MAXSIZE 16384M,
+  'D:\ORADATA\GDE_DW3\DW3\DW3_MV\DW3_MV_16KBLK_X4M002.DBF' SIZE 104857600
+  AUTOEXTEND ON NEXT 2147483648 MAXSIZE 16384M,
+  'D:\ORADATA\GDE_DW3\DW3\DW3_MV\DW3_MV_16KBLK_X4M003.DBF' SIZE 104857600
+  AUTOEXTEND ON NEXT 2147483648 MAXSIZE 16384M,
+  'D:\ORADATA\GDE_DW3\DW3\DW3_MV\DW3_MV_16KBLK_X4M004.DBF' SIZE 104857600
+  AUTOEXTEND ON NEXT 2147483648 MAXSIZE 16384M,
+  'D:\ORADATA\GDE_DW3\DW3\DW3_MV\DW3_MV_16KBLK_X4M005.DBF' SIZE 104857600
+  AUTOEXTEND ON NEXT 2147483648 MAXSIZE 16384M
+  LOGGING ONLINE PERMANENT BLOCKSIZE 16384
+  EXTENT MANAGEMENT LOCAL UNIFORM SIZE 4194304 DEFAULT
+ NOCOMPRESS  SEGMENT SPACE MANAGEMENT MANUAL;
+
+CREATE TABLESPACE INSREP_X1M DATAFILE
+  'D:\ORADATA\GDE_DW3\DW3\GENERAL\INSREP_X1M001.DBF' SIZE 524288000
+  AUTOEXTEND ON NEXT 524288000 MAXSIZE 6G
+  LOGGING ONLINE PERMANENT BLOCKSIZE 8192
+  EXTENT MANAGEMENT LOCAL UNIFORM SIZE 1048576 DEFAULT
+ NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO;
+
+CREATE TABLESPACE TOOLS DATAFILE
+  'D:\ORADATA\GDE_DW3\DW3\GENERAL\TOOLS01.DBF' SIZE 10M
+  LOGGING ONLINE PERMANENT BLOCKSIZE 8192
+  EXTENT MANAGEMENT LOCAL UNIFORM SIZE 1048576 DEFAULT
+ NOCOMPRESS  SEGMENT SPACE MANAGEMENT AUTO;
+
+
+-- ################
+-- # Install Java #
+-- ################
+
+spool D:\DBA\Kevin\full_jvminst_dqidwdevb.log;
+
+set echo on
+startup mount
+alter system set "_system_trig_enabled" = false scope=memory;
+alter database open;
+select obj#, name from obj$
+where type#=28 or type#=29 or type#=30 or namespace=32;
+
+@D:\Oracle\Product\11.2.0\dbhome_11203\javavm\install\initjvm.sql
+
+select count(*), object_type from all_objects
+where object_type like '%JAVA%' group by object_type;
+
+@D:\Oracle\Product\11.2.0\dbhome_11203\xdk\admin\initxml.sql
+
+select count(*), object_type from all_objects
+where object_type like '%JAVA%' group by object_type;
+
+@D:\Oracle\Product\11.2.0\dbhome_11203\xdk\admin\xmlja.sql
+
+select count(*), object_type from all_objects
+where object_type like '%JAVA%' group by object_type;
+
+@D:\Oracle\Product\11.2.0\dbhome_11203\rdbms\admin\catjava.sql
+
+select count(*), object_type from all_objects
+where object_type like '%JAVA%' group by object_type;
+
+@D:\Oracle\Product\11.2.0\dbhome_11203\rdbms\admin\catexf.sql
+
+select count(*), object_type from all_objects
+where object_type like '%JAVA%' group by object_type;
+
+shutdown immediate
+set echo off
+spool off
+exit
+
+-- find errors
+findstr /B /N "ORA-" D:\DBA\Kevin\full_jvminst_dqidwdevb.log
+findstr /B /N "SP2-" D:\DBA\Kevin\full_jvminst_dqidwdevb.log
+
+
+-- ###############
+-- # Install XML #
+-- ###############
+
+spool D:\DBA\Kevin\xmldb_install_dqidwdevb.log
+startup
+
+@D:\Oracle\Product\11.2.0\dbhome_11203\rdbms\admin\catqm.sql change_on_install SYSAUX TEMP NO
+
+spool off
+exit
+
+findstr /B /N "ORA-" D:\DBA\Kevin\xmldb_install_dqidwdevb.log
+findstr /B /N "SP2-" D:\DBA\Kevin\xmldb_install_dqidwdevb.log
+
+
+-- ################
+-- # Create Users #
+-- ################
+
+-- CDC_DWDW3_PUB
+CREATE USER CDC_DWDW3_PUB IDENTIFIED BY &cdc_dwdw3_pub_pwd
+DEFAULT TABLESPACE CDC_PUBLISHER_X1M 
+TEMPORARY TABLESPACE TEMP 
+PROFILE DEFAULT;
+
+GRANT CREATE SESSION TO CDC_DWDW3_PUB;
+GRANT DBA TO CDC_DWDW3_PUB;
+GRANT EXECUTE_CATALOG_ROLE TO CDC_DWDW3_PUB;
+GRANT SELECT_CATALOG_ROLE TO CDC_DWDW3_PUB;
+
+ALTER USER CDC_DWDW3_PUB DEFAULT ROLE DBA;
+ALTER USER CDC_DWDW3_PUB DEFAULT ROLE EXECUTE_CATALOG_ROLE;
+ALTER USER CDC_DWDW3_PUB DEFAULT ROLE SELECT_CATALOG_ROLE;
+
+ALTER USER CDC_DWDW3_PUB QUOTA UNLIMITED ON CDC_PUBLISHER_X1M;
+ALTER USER CDC_DWDW3_PUB QUOTA UNLIMITED ON SYSAUX;
+
+
+-- #########
+-- # ROLES #
+-- #########
+
+-- roles in DW3QA not in DQIDWDEVB
+API_BROKER
+API_INSURER
+DW3_ADMIN
+DW3_ADMIN_RO
+DW3_BASIC_RO
+DW3_CONFIG
+MS_REPORTING
+MS_REPORTING_RISK
+
+-- create roles
+create role API_BROKER;
+create role API_INSURER;
+create role DW3_ADMIN;
+create role DW3_ADMIN_RO;
+create role DW3_BASIC_RO;
+create role DW3_CONFIG;
+create role MS_REPORTING;
+create role MS_REPORTING_RISK;
+
+-- system privs for selected roles
+ROLE              PRIV
+----------------- -------------------
+API_BROKER	  CREATE SESSION
+		  CREATE TABLE
+API_INSURER       CREATE SESSION
+		  CREATE TABLE
+DW3_ADMIN	  n/a
+DW3_ADMIN_RO	  FLASHBACK ANY TABLE
+DW3_BASIC_RO	  n/a
+DW3_CONFIG	  n/a
+MS_REPORTING	  CREATE SESSION
+		  CREATE TABLE
+MS_REPORTING_RISK CREATE SESSION
+		  CREATE TABLE
+
+-- grants
+GRANT CREATE SESSION TO API_BROKER;
+GRANT CREATE TABLE TO API_BROKER;
+GRANT CREATE SESSION TO API_INSURER;
+GRANT CREATE TABLE TO API_INSURER;
+GRANT FLASHBACK ANY TABLE TO DW3_ADMIN_RO;
+GRANT CREATE SESSION TO MS_REPORTING;
+GRANT CREATE TABLE TO MS_REPORTING;
+GRANT CREATE SESSION TO MS_REPORTING_RISK ;
+GRANT CREATE TABLE TO MS_REPORTING_RISK ;
+
+
+-- ##########
+-- # Import #
+-- ##########
+
+02_dw3_IMP_harness.bat <SYSPWD>-<DWSID>-<DW3PWD>-<INSREPD00PWD>-<DWACTPWD>-<INSREPCONFIGPWD>-<INSREPWMPWD>-<CUTDOWNPATH>-<ORACLEHOME>-<SQLPLUSPATH>-<DW3SYSTEMPWD>-<DW3REFSID>-<DW3ROPWD>-<INSREPROPWD>
+
+/* DW3_SCHEMAS_IMP.log */
+1x	ORA-39083: Object type DEFAULT_ROLE failed to create with error:
+	ORA-01918: user 'DW3_CONFIG' does not exist
+10+	ORA-39083: Object type OBJECT_GRANT failed to create with error:
+	ORA-01917: user or role 'ABCINS01' does not exist
+100+	ORA-39082: Object type ALTER_PROCEDURE:"DW3"."L1START" created with compilation warnings
+7x	ORA-04052: error occurred when looking up remote object MS7.DSSMDUSRACCT@DW3MS7.DEV.INT.ACTURIS.COM (act, flx, admn)
+
+/* DW3_CUTDOWN_NEW_USERS_IMP.log */
+233x	ORA-31684: Object type USER:"HEWEST08" already exists
+
+/* DW3_CUTDOWN_IMP_FILTERED.LOG */
+no errors
+
+/* DW3_CUTDOWN_IMP_ALL_DATA.LOG */
+100+	ORA-31693: Table data object "DW3"."SUPPLIER_UTC" failed to load/unload and is being skipped due to error:
+
+/* INSREPD00_DW3_CUTDOWN_IMP_ALL_DATA.LOG */
+no errors
+
+/* DW3_SCHEMAS_IND_IMP.log */
+1x	ORA-39083: Object type INDEX failed to create with error:
+	ORA-01452: cannot CREATE UNIQUE INDEX; duplicate keys found
+Failing sql is:
+CREATE UNIQUE INDEX "DW3"."ADDRESS_L2_PK" ON "DW3"."ADDRESS_L2" ("ADDRESS_KEY") PCTFREE 10 INITRANS 2 MAXTRANS 255  STORAGE(INITIAL 4194304 NEXT 4194304 MINEXTENTS 1 MAXEXTENTS 2147483645 PCTINCREASE 0 FREELISTS 1 FREELIST GROUPS 1 BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT) TABLESPACE "DW3_L2_X4M" PARALLEL 1 
+
+/* DW3_SCHEMAS_EXTRA_IMP.log */
+1x	ORA-39083: Object type CONSTRAINT failed to create with error:
+	ORA-02437: cannot validate (DW3.ADDRESS_L2_PK) - primary key violated
+2x	ORA-39083: Object type REF_CONSTRAINT failed to create with error:
+	ORA-02298: cannot validate (DW3.TRADE_L2_FK01) - parent keys not found
+5x	ORA-39083: Object type REF_CONSTRAINT failed to create with error:
+	ORA-02270: no matching unique or primary key for this column-list
+2x	ORA-39083: Object type MATERIALIZED_VIEW_LOG failed to create with error:
+	ORA-32422: commit SCN-based materialized view log cannot be created on table "DW3"."RATING_METHOD_L2" when there exist direct load/PMOP log entries for the table
+2x	ORA-39083: Object type PROCOBJ failed to create with error:
+	ORA-24157: duplicate variable name RATING_DETAILS_1
+2x	ORA-39083: Object type PROCOBJ failed to create with error:
+	ORA-24150: evaluation context DW3.SCHED_EV_CTX$3 does not exist
+3x	ORA-39083: Object type PROCOBJ failed to create with error:
+	ORA-24141: rule set DW3.SCHED_RULESET$1 does not exist
+
+
+-- ##########
+-- # ACTGDE #
+-- ##########
+
+ALTER SYSTEM SET log_archive_format='%t_%s_%r.arc' scope=spfile;
+
+SHUTDOWN IMMEDIATE;
+STARTUP MOUNT;
+
+ALTER SYSTEM SET log_archive_dest_1='LOCATION=D:\oradata\GDE\archlogs\Acturis' scope=both;
+ALTER SYSTEM SET log_archive_dest_2='SERVICE=DQIDWDEVB ARCH OPTIONAL NOREGISTER REOPEN=5 TEMPLATE=D:\oradata\GDE_DW3\dw3\archlogs_acturis_received\%t_%s_%r.arc' scope=both;
+ALTER SYSTEM SET log_archive_dest_state_1='ENABLE' scope=both;
+ALTER SYSTEM SET log_archive_dest_state_2='ENABLE' scope=both;
+
+ALTER DATABASE ARCHIVELOG;
+ALTER DATABASE OPEN;
+
+
+-- ##########
+-- # FLXGDE #
+-- ##########
+
+ALTER SYSTEM SET log_archive_format='%t_%s_%r.arc' scope=spfile;
+
+SHUTDOWN IMMEDIATE;
+STARTUP MOUNT;
+
+ALTER SYSTEM SET log_archive_dest_1='LOCATION=D:\oradata\GDE\archlogs\Flexi' scope=both;
+ALTER SYSTEM SET log_archive_dest_2='SERVICE=DQIDWDEVB ARCH OPTIONAL NOREGISTER REOPEN=5 TEMPLATE=D:\oradata\GDE_DW3\dw3\archlogs_flexi_received\%t_%s_%r.arc' scope=both;
+ALTER SYSTEM SET log_archive_dest_state_1='ENABLE' scope=both;
+ALTER SYSTEM SET log_archive_dest_state_2='ENABLE' scope=both;
+
+ALTER DATABASE ARCHIVELOG;
+ALTER DATABASE OPEN;
+
+
+-- ##########
+-- # DQIDWDEVB #
+-- ##########
+
+ALTER SYSTEM SET log_archive_format='%t_%s_%r.arc' scope=both;
+ALTER SYSTEM SET global_names=TRUE scope=both;
+ALTER SYSTEM SET log_archive_dest_2='LOCATION=D:\oradata\GDE_DW3\dw3\archlogs_acturis_received mandatory valid_for=(standby_logfile,primary_role)' scope=both;
+ALTER SYSTEM SET log_archive_dest_3='LOCATION=D:\oradata\GDE_DW3\dw3\archlogs_flexi_received mandatory valid_for=(standby_logfile,primary_role)' scope=both;
+ALTER SYSTEM SET log_archive_dest_state_2='ENABLE' scope=both;
+ALTER SYSTEM SET log_archive_dest_state_3='ENABLE' scope=both;
+
+SHUTDOWN IMMEDIATE
+STARTUP
+
+
+-- #########
+-- # FIXES #
+-- #########
+
+-- DW3TEST
+expdp 'sys@dw3test as sysdba' DIRECTORY=DW3_DP_DIR DUMPFILE=CDC_DWDW3_PUB_TEST.DMP LOGFILE=CDC_DWDW3_PUB_TEST_exp.log CONTENT=ALL SCHEMAS=CDC_DWDW3_PUB,CDC_ADMIN
+
+-- DQIDWDEVB
+impdp 'sys@dqidwdevb as sysdba' DIRECTORY=DW3_DP_DIR DUMPFILE=CDC_DWDW3_PUB_TEST.DMP LOGFILE=CDC_DWDW3_PUB_GDE_imp.log CONTENT=ALL TABLE_EXISTS_ACTION=TRUNCATE
+
+-- CDC_ADMIN
+delete from cdc_rebuild_logging where cdc_rebuild_logging_key > 24653;
+
+-- DQIDWDEVB as SYSDBA
+grant select on dba_registered_archived_log to cdc_dwdw3_pub;
+grant execute on DBMS_CDC_PUBLISH to cdc_dwdw3_pub;
+grant execute on DBMS_APPLY_ADM to cdc_dwdw3_pub;
+grant execute on DBMS_CAPTURE_ADM to cdc_dwdw3_pub;
+grant select on all_change_tables to cdc_dwdw3_pub;
+grant select on dba_apply_error to cdc_dwdw3_pub;
+grant select on sys.v_$parameter to cdc_dwdw3_pub;
+grant execute on cdc_admin.cdc_rebuild_pkg to dw3;
+grant execute on SYS.DBMS_STREAMS_ADM to cdc_dwdw3_pub;
+grant execute on SYS.DBMS_AQADM to cdc_dwdw3_pub;
+grant select on cdc_dwdw3_pub.cdc_heartbeat_ct to dw3;
+grant execute on CDC_DWDW3_PUB.PUBLISHER_CHECKS_PKG to dw3;
+
+-- ACTDW
+drop and recreate DWACT.DEV.INT.ACTURIS.COM and DWACT.PD.UK.ACTURIS.COM
+alter package CDC_REBUILD_PKG compile;
+alter package CDC_REBUILD_PKG compile body;
+
+-- FLXDW
+drop and recreate DWACT.DEV.INT.ACTURIS.COM and DWACT.PD.UK.ACTURIS.COM
+alter package CDC_REBUILD_PKG compile;
+alter package CDC_REBUILD_PKG compile body;
+
+-- ACTGDE as SYSDBA
+grant select on act_cdc_admin.admin_log_group_tables to insurer_integration;
+grant execute on dbms_capture_adm to act_cdc_admin;
+
+
+-- ################
+-- # POST-REFRESH #
+-- ################
+
+@dw3_master_harness_pt1_gde.sql FLXGDE ppkdhs733mx0wte qwasio5 ACTGDE ushwiasdlkas8 wh0dun1t DQIDWDEVB CDC_ADMIN D:\DBA\refreshes\9i_RefreshScripts\dw3 memory memory cutdown GDE hul4ho0p flxro actro null null actstatsro loggde w3irdl1ttledud3
+@dw3_master_harness_pt2_gde.sql FLXGDE qwasio5 ACTGDE wh0dun1t DQIDWDEVB CDC_ADMIN w3irdl1ttledud3 D:\DBA\refreshes\9i_RefreshScripts\dw3 memory memory cutdown GDE null l0v3f1lm p4ddl3b0at null
+
+
+-- ###################
+-- # Import - Take 2 #
+-- ###################
+
+@03_DROP_CREATE_DW3.sql
+02_dw3_IMP_harness.bat qwasio5-dqidwdevb-wh0dun1t-p4ddl3b0at-h3lip4d-equ4ti0n5-al4b4mat1de-D:\DBA\Refreshes\cutdown-D:\oracle\product\11.2.0\dbhome_11203-D:\oracle\product\11.2.0\dbhome_11203\BIN-qwasio5-dw3deva-hul4ho0p-v10la
