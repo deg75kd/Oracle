@@ -1,0 +1,1224 @@
+-- #############
+-- # ATTEMPT 1 #
+-- #############
+
+-- sysdba
+grant select on v_$transaction to tbl_owner;
+
+-- session 1 (tbl_owner@actapx)
+create table lock_me as
+select object_id, object_name from all_objects where rownum<26;
+
+OBJECT_ID OBJECT_NAME
+--------- -----------------------
+      100 ORA$BASE
+      116 DUAL
+      117 DUAL
+...
+
+update lock_me set object_name='dual';
+25 rows updated.
+
+select start_time, xid, xidusn, xidslot,
+xidsqn, start_scn, to_char(start_scn, 'XXXXXXXXXX')
+from v$transaction order by start_time;
+START_TIME           XID                  XIDUSN    XIDSLOT     XIDSQN  START_SCN TO_CHAR(STA
+-------------------- ---------------- ---------- ---------- ---------- ---------- -----------
+02/02/12 13:41:23    0A001B00667D0000         10         27      32102 1.2866E+11  1DF4F1FE05
+
+rollback;
+
+update lock_me set object_name='dual' where object_id<200;
+3 rows updated.
+
+select start_time, xid, xidusn, xidslot,
+xidsqn, start_scn, to_char(start_scn, 'XXXXXXXXXX')
+from v$transaction order by start_time;
+START_TIME           XID                  XIDUSN    XIDSLOT     XIDSQN     START_SCN TO_CHAR(STA
+-------------------- ---------------- ---------- ---------- ---------- ------------- -----------
+02/02/12 13:42:00    0A000D004B7D0000         10         13      32075  128663554610  1DF4F20A32
+
+rollback;
+
+update lock_me set object_name='dual' where object_id=116;
+1 row updated.
+
+select start_time, xid, xidusn, xidslot,
+xidsqn, start_scn, to_char(start_scn, 'XXXXXXXXXX')
+from v$transaction order by start_time;
+START_TIME           XID                  XIDUSN    XIDSLOT     XIDSQN     START_SCN TO_CHAR(STA
+-------------------- ---------------- ---------- ---------- ---------- ------------- -----------
+02/02/12 13:43:12    0A000200887D0000         10          2      32136  128663554645  1DF4F20A55
+
+-- session 2
+update lock_me set object_name='not dual' where object_id=116;
+(hangs)
+
+-- session 1
+rollback;
+
+-- session 2
+1 row updated.
+
+select start_time, xid, xidusn, xidslot,
+xidsqn, start_scn, to_char(start_scn, 'XXXXXXXXXX')
+from v$transaction order by start_time;
+START_TIME           XID                  XIDUSN    XIDSLOT     XIDSQN     START_SCN TO_CHAR(STA
+-------------------- ---------------- ---------- ---------- ---------- ------------- -----------
+02/02/12 13:45:03    0A000900937D0000         10          9      32147  128663554697  1DF4F20A89
+
+rollback;
+
+
+-- sysdba
+column member format a60
+select lf.group#, vl.status, lf.member 
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+# STATUS           MEMBER
+- ---------------- --------------------------------------------
+1 INACTIVE         D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG
+2 INACTIVE         D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG
+3 CURRENT          D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG
+
+alter system switch logfile;
+
+select lf.group#, vl.status, lf.member 
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+# STATUS           MEMBER
+- ---------------- --------------------------------------------
+1 CURRENT          D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG
+2 INACTIVE         D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG
+3 ACTIVE           D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG
+
+exec dbms_logmnr.add_logfile('&my_member');
+exec dbms_logmnr.start_logmnr(options => dbms_logmnr.dict_from_online_catalog);
+
+col username format a20
+col sid format 9990
+col serial# format 99990
+col sql_redo format 100
+select username,session# sid,serial#,sql_redo from v$logmnr_contents 
+     where XID = '&blocking_xid';
+Enter value for blocking_xid: 0A000D004B7D0000
+USERNAME    SID    SERIAL# SQL_REDO
+----------- ------ ------- -----------------------------------------------------
+UNKNOWN     0      0       rollback;
+(same result using XID before this)
+
+exec DBMS_LOGMNR.END_LOGMNR;
+
+
+-- #############
+-- # ATTEMPT 2 #
+-- #############
+
+-- session 1 (tbl_owner@actapx)
+update lock_me set object_name='dual';
+25 rows updated.
+
+select start_time, xid, xidusn, xidslot,
+xidsqn, start_scn, to_char(start_scn, 'XXXXXXXXXX')
+from v$transaction order by start_time;
+START_TIME           XID                  XIDUSN    XIDSLOT     XIDSQN     START_SCN TO_CHAR(STA
+-------------------- ---------------- ---------- ---------- ---------- ------------- -----------
+02/02/12 15:13:11    040002000B070000          4          2       1803  128663554701  1DF4F20A8D
+
+rollback;
+
+update lock_me set object_name='dual' where object_id<200;
+3 rows updated.
+
+select start_time, xid, xidusn, xidslot,
+xidsqn, start_scn, to_char(start_scn, 'XXXXXXXXXX')
+from v$transaction order by start_time;
+START_TIME           XID                  XIDUSN    XIDSLOT     XIDSQN     START_SCN TO_CHAR(STA
+-------------------- ---------------- ---------- ---------- ---------- ------------- -----------
+02/02/12 15:13:40    0A000600A77D0000         10          6      32167  128663557583  1DF4F215CF
+
+rollback;
+
+update lock_me set object_name='dual' where object_id=116;
+1 row updated.
+
+select start_time, xid, xidusn, xidslot,
+xidsqn, start_scn, to_char(start_scn, 'XXXXXXXXXX')
+from v$transaction order by start_time;
+START_TIME           XID                  XIDUSN    XIDSLOT     XIDSQN     START_SCN TO_CHAR(STA
+-------------------- ---------------- ---------- ---------- ---------- ------------- -----------
+02/02/12 15:14:07    0300100001070000          3         16       1793  128663557594  1DF4F215DA
+
+-- session 2
+update lock_me set object_name='not dual' where object_id=116;
+(hangs)
+
+-- session 1
+COMMIT;
+
+-- session 2
+1 row updated.
+
+select start_time, xid, xidusn, xidslot,
+xidsqn, start_scn, to_char(start_scn, 'XXXXXXXXXX')
+from v$transaction order by start_time;
+START_TIME           XID                  XIDUSN    XIDSLOT     XIDSQN     START_SCN TO_CHAR(STA
+-------------------- ---------------- ---------- ---------- ---------- ------------- -----------
+02/02/12 15:14:44    0A0019006F7D0000         10         25      32111  128663557611  1DF4F215EB
+
+commit;
+
+
+-- sysdba
+column member format a60
+select lf.group#, vl.status, lf.member 
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+# STATUS           MEMBER
+- ---------------- -------------------------------------------
+1 CURRENT          D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG
+2 INACTIVE         D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG
+3 INACTIVE         D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG
+
+alter system switch logfile;
+
+select lf.group#, vl.status, lf.member 
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+# STATUS           MEMBER
+- ---------------- -------------------------------------------
+1 ACTIVE           D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG
+2 CURRENT          D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG
+3 INACTIVE         D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG
+
+exec dbms_logmnr.add_logfile('&my_member');
+exec dbms_logmnr.start_logmnr(options => dbms_logmnr.dict_from_online_catalog);
+
+col username format a20
+col sid format 9990
+col serial# format 99990
+col sql_redo format 100
+select username,session# sid,serial#,sql_redo from v$logmnr_contents 
+     where XID = '&blocking_xid';
+Enter value for blocking_xid: 0A000D004B7D0000
+USERNAME    SID    SERIAL# SQL_REDO
+----------- ------ ------- -----------------------------------------------------
+UNKNOWN     0      0       commit;
+
+
+exec DBMS_LOGMNR.END_LOGMNR;
+
+
+
+col first_change# format 999999999990
+col next_change# format 999999999990
+select lf.group#, vl.status, lf.member, vl.first_change#, vl.next_change# 
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+# STATUS           MEMBER                                                       FIRST_CHANGE#  NEXT_CHANGE#
+- ---------------- ------------------------------------------------------------ ------------- -------------
+1 INACTIVE         D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                   128663554794  128663557773
+2 INACTIVE         D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                   128663557773  128663557944
+3 CURRENT          D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                   128663557944 #############
+
+exec dbms_logmnr.add_logfile('D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG');
+exec dbms_logmnr.start_logmnr(options => dbms_logmnr.dict_from_online_catalog);
+
+col username format a20
+col sid format 9990
+col serial# format 99990
+col sql_redo format a100
+select username,session# sid,serial#,sql_redo from v$logmnr_contents where scn=128663557594;
+(same results)
+
+select username,session# sid,serial#,sql_redo from v$logmnr_contents where cscn=128663557594;
+no rows selected
+
+select username,session# sid,serial#,sql_redo from v$logmnr_contents where scn=128663557593;
+USERNAME               SID SERIAL#
+-------------------- ----- -------
+SQL_REDO
+-----------------------------------------------------------------------------------------------
+UNKNOWN                  0       0
+Unsupported
+
+UNKNOWN                  0       0
+update "TBL_OWNER"."LOCK_ME" set "OBJECT_NAME" = 'ORA$BASE' where ROWID = 'AAAU05AAEAAAACBAAA';
+
+
+-- ###############################
+-- # FROM BLOCKED SID TO BAD SQL #
+-- ###############################
+
+-- session 1 (tbl_owner@actapx)
+SELECT sys_context('USERENV', 'SID') FROM DUAL;
+96
+
+  ID OBJECT_NAME
+---- ---------------------------
+ 100 ORA$BASE
+ 116 DUAL
+ 117 DUAL
+ 280 MAP_OBJECT
+ 365 SYSTEM_PRIVILEGE_MAP
+ 367 SYSTEM_PRIVILEGE_MAP
+ 368 TABLE_PRIVILEGE_MAP
+ 370 TABLE_PRIVILEGE_MAP
+ 371 STMT_AUDIT_OPTION_MAP
+ 373 STMT_AUDIT_OPTION_MAP
+1081 DM$EXPIMP_ID_SEQ
+1253 STANDARD
+1255 DBMS_STANDARD
+1256 DBMS_STANDARD
+1276 ALL_XML_SCHEMAS
+1277 ALL_XML_SCHEMAS2
+1280 UTL_RAW
+1282 GV$XSTREAM_CAPTURE
+1284 V$XSTREAM_CAPTURE
+1286 GV$GOLDENGATE_CAPTURE
+1288 V$GOLDENGATE_CAPTURE
+1290 GV$XSTREAM_TRANSACTION
+1292 V$XSTREAM_TRANSACTION
+1294 GV$GOLDENGATE_TRANSACTION
+1296 V$GOLDENGATE_TRANSACTION
+
+update lock_me set object_name='3rd times a charm';
+25 rows updated.
+
+set numf 999999999990
+select start_time, xid, xidusn, xidslot,
+xidsqn, start_scn, to_char(start_scn, 'XXXXXXXXXX')
+from v$transaction order by start_time;
+START_TIME           XID                     XIDUSN       XIDSLOT        XIDSQN     START_SCN TO_CHAR(STA
+-------------------- ---------------- ------------- ------------- ------------- ------------- -----------
+02/03/12 17:40:12    0A002100067E0000            10            33         32262  129635106691  1E2EDABF83
+
+rollback;
+
+update lock_me set object_name='3rd times a charm' where object_id=1296;
+1 row updated.
+
+select start_time, xid, xidusn, xidslot,
+xidsqn, start_scn, to_char(start_scn, 'XXXXXXXXXX')
+from v$transaction order by start_time;
+START_TIME           XID                     XIDUSN       XIDSLOT        XIDSQN     START_SCN TO_CHAR(STA
+-------------------- ---------------- ------------- ------------- ------------- ------------- -----------
+02/03/12 17:42:02    03001D0008070000             3            29          1800  129635106765  1E2EDABFCD
+
+-- session 2
+SELECT sys_context('USERENV', 'SID') FROM DUAL;
+192
+
+update lock_me set object_name='not dual' where object_id=1296;
+(hangs)
+
+-- session 1
+COMMIT;
+
+-- session 2
+1 row updated.
+
+set numf 999999999990
+select start_time, xid, xidusn, xidslot,
+xidsqn, start_scn, to_char(start_scn, 'XXXXXXXXXX')
+from v$transaction order by start_time;
+START_TIME           XID                     XIDUSN       XIDSLOT        XIDSQN     START_SCN TO_CHAR(STA
+-------------------- ---------------- ------------- ------------- ------------- ------------- -----------
+02/03/12 17:42:46    0A001A00127E0000            10            26         32274  129635106824  1E2EDAC008
+
+commit;
+
+
+-- sysdba
+select sid, serial#, username from v$session where osuser='dejesusk';
+SID    SERIAL# USERNAME
+--- ---------- ----------
+  1      11619 SYS
+ 96       3541 TBL_OWNER - blocking
+192       1869 TBL_OWNER - ** blocked **
+
+col time format a15
+col w_state format a40
+WITH blocked AS (
+   select session_id W_SID, session_serial# W_SER, blocking_session, blocking_session_serial#,
+   DECODE(session_state, 'WAITING', event, session_state) W_STATE
+   from v$active_session_history where session_id=192
+),
+blockers AS (
+   select to_char(sample_time, 'HH24:MI:SS.FF') TIME, session_id BL_SID, session_serial# BL_SER, xid BL_XID
+   from v$active_session_history
+   where sample_time between SYSTIMESTAMP-(1/24) and SYSTIMESTAMP
+)
+select time, bl_sid, bl_xid, w_sid, w_state
+from blocked, blockers
+where blocking_session=bl_sid and blocking_session_serial#=bl_ser
+order by time;
+
+TIME                BL_SID BL_XID                W_SID W_STATE
+--------------- ---------- ---------------- ---------- ------------------------------
+17:39:16.248            96 0A000600457E0000        192 enq: TX - row lock contention
+...
+
+select distinct to_char(ASH.sample_time, 'HH24:MI:SS.FF') TIME, ASH.session_id bl_sid, 
+ASH.xid bl_xid, W.session_id w_sid, W.w_state
+from v$active_session_history ASH,
+(select session_id, blocking_session, blocking_session_serial#,
+ DECODE(session_state, 'WAITING', event, session_state) W_STATE
+ from v$active_session_history where session_id=192) W
+where W.blocking_session=ASH.session_id and w.blocking_session_serial#=ASH.session_serial#
+and w.w_state like 'enq: T%' 
+and ASH.sample_time > systimestamp-(1/24);
+
+TIME                BL_SID BL_XID                W_SID W_STATE
+--------------- ---------- ---------------- ---------- ------------------------------
+17:39:16.248            96 0A000600457E0000        192 enq: TX - row lock contention
+
+set numf 999999999990
+alter session set nls_date_format='MONDD HH24:MI:SS';
+col GP format 90
+col status format a8
+column member format a60
+select lf.group# GP, vl.status, lf.member, first_time, next_time
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+GP STATUS   MEMBER                                                       FIRST_TIME     NEXT_TIME
+-- -------- ------------------------------------------------------------ -------------- --------------
+ 1 CURRENT  D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                  FEB03 11:47:47
+ 2 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                  FEB02 15:16:00 FEB02 15:23:39
+ 3 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                  FEB02 15:23:39 FEB03 11:47:47
+
+alter system switch logfile;
+
+select lf.group#, vl.status, lf.member 
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+GP STATUS   MEMBER                                                       FIRST_TIME     NEXT_TIME
+-- -------- ------------------------------------------------------------ -------------- --------------
+ 1 ACTIVE   D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                  FEB03 11:47:47 FEB03 17:53:30
+ 2 CURRENT  D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                  FEB03 17:53:30
+ 3 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                  FEB02 15:23:39 FEB03 11:47:47
+
+exec dbms_logmnr.add_logfile('D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG');
+exec dbms_logmnr.start_logmnr(options => dbms_logmnr.dict_from_online_catalog);
+
+col username format a20
+col sid format 9990
+col serial# format 99990
+col sql_redo format a50
+select scn, timestamp, sql_redo 
+from v$logmnr_contents where XID = '03001D0008070000';
+          SCN TIMESTAMP      SQL_REDO
+------------- -------------- -------------
+ 129635106823 FEB03 17:43:57 commit;
+
+select scn, timestamp, sql_redo 
+from v$logmnr_contents where XID = '0A000600457E0000';
+(entries for drop table, several unsupported, and a commit)
+
+
+
+
+
+
+exec DBMS_LOGMNR.END_LOGMNR;
+
+---------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+break on MY_TIME
+col my_time format a8
+column my_sid format 9990
+column my_ser format 99999
+column my_state format a30
+column my_blkr format 9990
+select distinct to_char(a.sample_time, 'HH24:MI:SS') MY_TIME,a.session_id MY_SID,a.session_serial# MY_SER,
+        DECODE(a.session_state, 'WAITING' ,a.event, a.session_state) MY_STATE,a.xid, a.sql_id,
+        a.blocking_session MY_BLKR
+from v$active_session_history a, dba_users u
+where a.blocking_session is not null and a.sample_time > to_date('03FEB12 10:00','DDMONRR HH24:MI')
+and a.xid is not null order by my_time;
+
+
+
+
+
+WITH blocked AS (
+   select session_id W_SID, session_serial# W_SER, blocking_session, blocking_session_serial#,
+   DECODE(session_state, 'WAITING', event, session_state) W_STATE
+   from v$active_session_history where session_id=192
+),
+blockers AS (
+   select to_char(sample_time, 'HH24:MI:SS.FF') TIME, session_id BL_SID, session_serial# BL_SER, xid BL_XID
+   from v$active_session_history
+   where sample_time between SYSTIMESTAMP-(1/24) and SYSTIMESTAMP
+)
+select time, bl_sid, bl_xid, w_sid, w_state
+from blocked, blockers
+where blocking_session=bl_sid and blocking_session_serial#=bl_ser
+order by time;
+
+
+
+
+between SYSTIMESTAMP-(2/24) and SYSTIMESTAMP;
+
+ASH.xid is not null and
+
+waiting 192,1845
+blocking 382,967
+
+select session_id W_SID, session_serial# W_SER, blocking_session, blocking_session_serial#,
+   DECODE(session_state, 'WAITING', event, session_state) W_STATE, xid
+   from v$active_session_history where session_id=192 and sample_time > to_date('03FEB12 10:00','DDMONRR HH24:MI');
+
+select sample_time from v$active_session_history 
+where session_id=192 and session_serial#=1845 and event like 'enq: T%'
+order by sample_time;
+03-FEB-12 10.12.44.173
+03-FEB-12 10.13.54.170
+
+select lf.group#, vl.status, lf.member, vl.first_time, vl.next_time
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+         3 ACTIVE
+D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG
+02-FEB-12 15.23.39 03-FEB-12 11.47.47
+
+exec dbms_logmnr.add_logfile('D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG');
+exec dbms_logmnr.start_logmnr(options => dbms_logmnr.dict_from_online_catalog);
+
+col scn format 999999999990
+col sql_redo format a100
+select scn, sql_redo from v$logmnr_contents 
+     where sql_redo is not null and timestamp between to_timestamp('03-FEB-12 10.12.44.173') and to_timestamp('03-FEB-12 10.13.54.170');
+         SCN SQL_REDO
+------------ ---------
+129633842317 commit;
+
+col username format a20
+col sid format 9990
+col serial# format 99990
+col sql_redo format a100
+select scn, username,session# sid,serial#,sql_redo from v$logmnr_contents where scn between 129633842300 and 129633842316 order by scn;
+
+select max(scn) from v$logmnr_contents where scn<129633842317;
+129633842270
+
+select scn, username,session# sid,serial#,sql_redo from v$logmnr_contents where scn=129633842270;
+ 129633842270 UNKNOWN                  0       0  rollback;
+
+col sql_redo format a50
+select scn, username,session# sid,serial#,sql_redo from v$logmnr_contents where session#=382
+and scn between 129633842270 and 129633842317 order by timestamp;
+
+select scn, username,session# sid,serial#,sql_redo from v$logmnr_contents where xid='0300020000070000';
+
+select scn, XID, sql_redo from v$logmnr_contents 
+where sql_redo like 'update "TBL_OWNER"."LOCK_ME" set "OBJECT_NAME" = ''V$GOLDENGATE_TRANSACTION%' order by timestamp;
+
+          SCN XID              SQL_REDO
+------------- ---------------- --------------------------------------------------
+ 129633842247 0A001000FFFFFFFF update "TBL_OWNER"."LOCK_ME" set "OBJECT_NAME" = '
+                               V$GOLDENGATE_TRANSACTION' where ROWID = 'AAAU05AAE
+                               AAAACBAAY';
+
+ 129633842269 07001400FFFFFFFF update "TBL_OWNER"."LOCK_ME" set "OBJECT_NAME" = '
+                               V$GOLDENGATE_TRANSACTION' where ROWID = 'AAAU05AAE
+                               AAAACBAAY';
+
+select * from v$active_session_history where session_id=192 and sample_time 
+between to_date('03FEB12 10:12:44','DDMONRR HH24:MI:SS') and to_date('03FEB12 10:14:00','DDMONRR HH24:MI:SS');
+
+select count(xid) from v$logmnr_contents where scn>129633842270;
+6007
+
+select count(xid) from v$logmnr_contents where scn between 129633842270 and 129633842317;
+2
+
+select count(xid) from v$logmnr_contents where scn>129633842317;
+6006
+
+select timestamp, scn, xid, rs_id, ssn from v$logmnr_contents where xid is not null and
+sql_redo like 'update "TBL_OWNER"."LOCK_ME" set "OBJECT_NAME" = ''V$GOLDENGATE_TRANSACTION%' order by timestamp;
+TIMESTAMP           SCN XID              RS_ID                                      SSN
+--------- ------------- ---------------- -------------------------------- -------------
+03-FEB-12  129633842247 0A001000FFFFFFFF  0x00004e.0001e8f0.0010                      0
+03-FEB-12  129633842269 07001400FFFFFFFF  0x00004e.0001e8fd.0010                      0
+
+select scn, timestamp, sql_redo from v$logmnr_contents where XID = '0A000600457E0000';
+drop table lock_me
+several "Unsupported"
+1 x delete from "SYS"."OBJ$"
+2 x delete from "SYS"."CON$"
+commit
+
+select scn, timestamp, sql_redo from v$logmnr_contents where XID = '07001400FFFFFFFF';
+no rows selected
+
+
+######################
+# ASH -> LOGMNR test #
+######################
+
+Is this connection possible on a consistent basis?
+
+Test
+1. log switch
+2. session 1 runs 1 txn
+3. session 2 runs 2 txns
+4. session 3 runs 3 txns
+(get sid for each session)
+5. log switch
+6. get XID from ASH
+7. try to find XID in logmnr
+
+-- sysdba
+set numf 999999999990
+alter session set nls_date_format='MONDD HH24:MI:SS';
+col GP format 90
+col status format a8
+column member format a60
+select lf.group# GP, vl.status, lf.member, first_time, next_time
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+GP STATUS   MEMBER                                                       FIRST_TIME     NEXT_TIME
+-- -------- ------------------------------------------------------------ -------------- --------------
+ 1 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                  FEB03 11:47:47 FEB03 17:53:30
+ 2 CURRENT  D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                  FEB03 17:53:30
+ 3 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                  FEB02 15:23:39 FEB03 11:47:47
+
+alter system switch logfile;
+
+select lf.group# GP, vl.status, lf.member, first_time, next_time
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+GP STATUS   MEMBER                                                       FIRST_TIME     NEXT_TIME
+-- -------- ------------------------------------------------------------ -------------- --------------
+ 1 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                  FEB03 11:47:47 FEB03 17:53:30
+ 2 ACTIVE   D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                  FEB03 17:53:30 FEB09 12:06:42
+ 3 CURRENT  D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                  FEB09 12:06:42
+
+-- tbl_owner
+SELECT sys_context('USERENV', 'SID') FROM DUAL;
+2851
+
+insert into lock_me values (1, 'session1');
+commit;
+
+-- intermittent session
+SELECT sys_context('USERENV', 'SID') FROM DUAL;
+2851
+grant select, insert, update, delete on lock_me to apex_table_owner;
+
+-- session 2
+SELECT sys_context('USERENV', 'SID') FROM DUAL;
+2851   14797 TBL_OWNER
+
+update lock_me set object_name='session2' where object_id=1;
+delete from lock_me where object_id=373;
+commit;
+
+
+-- session 3
+SELECT sys_context('USERENV', 'SID') FROM DUAL;
+2851   14799 TBL_OWNER
+
+revoke select, insert, update, delete on lock_me from apex_table_owner;
+insert into lock_me values (3, 'lock_me');
+
+select * from lock_me for update;
+T_ID OBJECT_NAME
+---- --------------------------
+ 100 ORA$BASE
+ 116 DUAL
+ 117 DUAL
+ 280 MAP_OBJECT
+ 365 SYSTEM_PRIVILEGE_MAP
+ 367 SYSTEM_PRIVILEGE_MAP
+ 368 TABLE_PRIVILEGE_MAP
+ 370 TABLE_PRIVILEGE_MAP
+ 371 STMT_AUDIT_OPTION_MAP
+1081 DM$EXPIMP_ID_SEQ
+1253 STANDARD
+1255 DBMS_STANDARD
+1256 DBMS_STANDARD
+1276 ALL_XML_SCHEMAS
+1277 ALL_XML_SCHEMAS2
+1280 UTL_RAW
+1282 GV$XSTREAM_CAPTURE
+1284 V$XSTREAM_CAPTURE
+1286 GV$GOLDENGATE_CAPTURE
+1288 V$GOLDENGATE_CAPTURE
+1290 GV$XSTREAM_TRANSACTION
+1292 V$XSTREAM_TRANSACTION
+1294 GV$GOLDENGATE_TRANSACTION
+1296 3rd times a charm
+   1 session2
+   3 lock_me
+
+update lock_me set object_name='session3' where object_id=1;
+
+commit;
+
+
+-- sysdba
+col W_SID format 99990
+col W_SER format 999990
+col blocking_session format 99990
+col blocking_session_serial# format 999990
+select session_id W_SID, session_serial# W_SER, blocking_session, blocking_session_serial#,
+   DECODE(session_state, 'WAITING', event, session_state) W_STATE, xid
+   from v$active_session_history where session_id=2851 and session_serial#=14797
+   and sample_time > sysdate-(1/24);
+no rows selected
+
+select session_id W_SID, session_serial# W_SER, blocking_session, blocking_session_serial#,
+   DECODE(session_state, 'WAITING', event, session_state) W_STATE, xid
+   from v$active_session_history where session_id=2851 and session_serial#=14799
+   and sample_time > sysdate-(1/24);
+no rows selected
+
+select session_id W_SID, session_serial# W_SER, blocking_session, blocking_session_serial#,
+   DECODE(session_state, 'WAITING', event, session_state) W_STATE, xid
+   from v$active_session_history where session_id=2851 and sample_time > sysdate-(1/24);
+ W_SID   W_SER BLOCKING_SESSION BLOCKING_SESSION_SERIAL# W_STATE                                  XID
+------ ------- ---------------- ------------------------ ---------------------------------------- ----------------
+  2851   14793                                           db file sequential read                  040014002D070000
+
+(depending on ASH is not reliable)
+
+
+select lf.group# GP, vl.status, lf.member, first_time, next_time
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+GP STATUS   MEMBER                                                       FIRST_TIME     NEXT_TIME
+-- -------- ------------------------------------------------------------ -------------- --------------
+ 1 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                  FEB03 11:47:47 FEB03 17:53:30
+ 2 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                  FEB03 17:53:30 FEB09 12:06:42
+ 3 CURRENT  D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                  FEB09 12:06:42
+
+alter system switch logfile;
+
+select lf.group# GP, vl.status, lf.member, first_time, next_time
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+GP STATUS   MEMBER                                                       FIRST_TIME     NEXT_TIME
+-- -------- ------------------------------------------------------------ -------------- --------------
+ 1 CURRENT  D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                  FEB09 12:27:45
+ 2 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                  FEB03 17:53:30 FEB09 12:06:42
+ 3 ACTIVE   D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                  FEB09 12:06:42 FEB09 12:27:45
+
+
+exec dbms_logmnr.add_logfile('D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG');
+exec dbms_logmnr.start_logmnr(options => dbms_logmnr.dict_from_online_catalog);
+
+col sql_redo format a80
+select scn, XID, sql_redo from v$logmnr_contents where XID='040014002D070000' order by timestamp;
+          SCN XID              SQL_REDO
+------------- ---------------- --------------------------------------------------------------------------------
+ 129700675806 040014002D070000 set transaction read write;
+ 129700675806 040014002D070000 insert into "SYS"."OBJAUTH$"("OBJ#","GRANTOR#","GRANTEE#","PRIVILEGE#","SEQUENCE
+                               #","PARENT","OPTION$","COL#") values ('85395','81','60','3','39172',NULL,NULL,NU
+                               LL);
+
+ 129700675806 040014002D070000 insert into "SYS"."OBJAUTH$"("OBJ#","GRANTOR#","GRANTEE#","PRIVILEGE#","SEQUENCE
+                               #","PARENT","OPTION$","COL#") values ('85395','81','60','6','39173',NULL,NULL,NU
+                               LL);
+
+ 129700675810 040014002D070000 commit;
+ 129700675806 040014002D070000 insert into "SYS"."OBJAUTH$"("OBJ#","GRANTOR#","GRANTEE#","PRIVILEGE#","SEQUENCE
+                               #","PARENT","OPTION$","COL#") values ('85395','81','60','10','39175',NULL,NULL,N
+                               ULL);
+
+ 129700675807 040014002D070000 grant select, insert, update, delete on lock_me to apex_table_owner;
+ 129700675809 040014002D070000 update "SYS"."OBJ$" set "OBJ#" = '85395', "DATAOBJ#" = '85395', "TYPE#" = '2', "
+                               CTIME" = TO_DATE('FEB03 17:39:22', 'MONDD HH24:MI:SS'), "MTIME" = TO_DATE('FEB09
+                                12:10:56', 'MONDD HH24:MI:SS'), "STIME" = TO_DATE('FEB03 17:39:22', 'MONDD HH24
+                               :MI:SS'), "STATUS" = '1', "FLAGS" = '0', "OID$" = NULL, "SPARE1" = '6', "SPARE2"
+                                = '1' where "OBJ#" = '85395' and "DATAOBJ#" = '85395' and "TYPE#" = '2' and "CT
+                               IME" = TO_DATE('FEB03 17:39:22', 'MONDD HH24:MI:SS') and "MTIME" = TO_DATE('FEB0
+                               3 17:39:22', 'MONDD HH24:MI:SS') and "STIME" = TO_DATE('FEB03 17:39:22', 'MONDD
+                               HH24:MI:SS') and "STATUS" = '1' and "FLAGS" = '0' and "OID$" IS NULL and "SPARE1
+                               " = '6' and "SPARE2" = '1' and ROWID = 'AAAAASAABAAANRkAAr';
+
+ 129700675806 040014002D070000 insert into "SYS"."OBJAUTH$"("OBJ#","GRANTOR#","GRANTEE#","PRIVILEGE#","SEQUENCE
+                               #","PARENT","OPTION$","COL#") values ('85395','81','60','9','39174',NULL,NULL,NU
+                               LL);
+
+select * from v$logmnr_contents where XID='040014002D070000' and SCN=129700675807 order by timestamp;
+timestamp	FEB09 12:10:56
+xidusn		4
+xidslt		20
+xidsqn		1837
+pxidusn		4
+pxidslt		20
+pxidsqn		1837
+pxid		040014002D070000
+operation	UPDATE
+username	UNKNOWN
+os_username	UNKNOWN
+machine_name	UNKNOWN
+session#	0
+serial#		0
+rs_id		0x000051.00000026.00c4
+info		USER DDL (PlSql=0 RecDep=0)
+
+select scn, XID, sql_redo from v$logmnr_contents where sql_redo like 'insert%' order by timestamp;
+          SCN XID              SQL_REDO
+------------- ---------------- --------------------------------------------------------------------------------
+all like insert into "SYS"...
+
+select scn, XID, sql_redo from v$logmnr_contents where sql_redo like 'delete%' order by timestamp;
+all like delete from "SYS"...
+
+select scn, XID, sql_redo from v$logmnr_contents where sql_redo like 'update%' order by timestamp;
+same BS
+
+select scn, XID, sql_redo from v$logmnr_contents where sql_redo is not null order by timestamp, scn;
+          SCN XID              SQL_REDO
+------------- ---------------- --------------------------------------------------------------------------------
+ 129700675778 0A0006008F810000 set transaction read write;
+lots of commits, UNKNOWN, etc.
+the grant & revoke commands
+only DML statements are on SYS tables
+
+
+########################
+# ASH -> LOGMNR test 2 #
+########################
+
+Is this connection possible on a consistent basis?
+
+Test
+0. turn on supplemental logging
+1. log switch
+2. session 1 runs 1 txn
+3. session 2 runs 2 txns
+4. session 3 runs 3 txns
+(get sid for each session)
+5. log switch
+6. get XID from ASH
+7. try to find XID in logmnr
+
+-- sysdba
+ALTER DATABASE ADD SUPPLEMENTAL LOG DATA;
+select SUPPLEMENTAL_LOG_DATA_MIN, SUPPLEMENTAL_LOG_DATA_PK, SUPPLEMENTAL_LOG_DATA_UI from v$database;
+
+-- should be this to match prod
+SUPPLEME SUP SUP
+-------- --- ---
+YES      NO  NO
+(check)
+
+set numf 999999999990
+alter session set nls_date_format='MONDD HH24:MI:SS';
+col GP format 90
+col status format a8
+column member format a60
+select lf.group# GP, vl.status, lf.member, first_time, next_time
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+GP STATUS   MEMBER                                                       FIRST_TIME     NEXT_TIME
+-- -------- ------------------------------------------------------------ -------------- --------------
+ 1 CURRENT  D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                  FEB09 12:27:45
+ 2 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                  FEB03 17:53:30 FEB09 12:06:42
+ 3 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                  FEB09 12:06:42 FEB09 12:27:45
+
+alter system switch logfile;
+
+select lf.group# GP, vl.status, lf.member, first_time, next_time
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+GP STATUS   MEMBER                                                       FIRST_TIME     NEXT_TIME
+-- -------- ------------------------------------------------------------ -------------- --------------
+ 1 ACTIVE   D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                  FEB09 12:27:45 FEB10 17:12:57
+ 2 CURRENT  D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                  FEB10 17:12:57
+ 3 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                  FEB09 12:06:42 FEB09 12:27:45
+
+-- session 1
+ SID    SERIAL# USERNAME
+---- ---------- -------------
+   1         13027 TBL_OWNER
+2851         18127 SYS
+
+insert into lock_me values (1, 'session1');
+select * from lock_me order by object_id;
+T_ID OBJECT_NAME
+---- ---------------------------
+   1 session3
+   1 session1
+   3 lock_me
+ 100 ORA$BASE
+ 116 DUAL
+ 117 DUAL
+ 280 MAP_OBJECT
+ 365 SYSTEM_PRIVILEGE_MAP
+ 367 SYSTEM_PRIVILEGE_MAP
+ 368 TABLE_PRIVILEGE_MAP
+ 370 TABLE_PRIVILEGE_MAP
+ 371 STMT_AUDIT_OPTION_MAP
+1081 DM$EXPIMP_ID_SEQ
+1253 STANDARD
+1255 DBMS_STANDARD
+1256 DBMS_STANDARD
+1276 ALL_XML_SCHEMAS
+1277 ALL_XML_SCHEMAS2
+1280 UTL_RAW
+1282 GV$XSTREAM_CAPTURE
+1284 V$XSTREAM_CAPTURE
+1286 GV$GOLDENGATE_CAPTURE
+1288 V$GOLDENGATE_CAPTURE
+1290 GV$XSTREAM_TRANSACTION
+1292 V$XSTREAM_TRANSACTION
+1294 GV$GOLDENGATE_TRANSACTION
+1296 3rd times a charm
+
+commit;
+
+update lock_me set object_name='session1' where object_id=3;
+delete from lock_me where object_id=370;
+commit;
+
+
+-- session 3
+ SID    SERIAL# USERNAME
+---- ---------- -------------
+2566          4605 TBL_OWNER
+2851         18127 SYS
+
+insert into lock_me values (2, 'lock_me');
+
+select * from lock_me for update;
+T_ID OBJECT_NAME
+---- --------------------------
+ 100 ORA$BASE
+ 116 DUAL
+ 117 DUAL
+ 280 MAP_OBJECT
+ 365 SYSTEM_PRIVILEGE_MAP
+ 367 SYSTEM_PRIVILEGE_MAP
+ 368 TABLE_PRIVILEGE_MAP
+ 371 STMT_AUDIT_OPTION_MAP
+   1 session1
+1081 DM$EXPIMP_ID_SEQ
+1253 STANDARD
+1255 DBMS_STANDARD
+1256 DBMS_STANDARD
+1276 ALL_XML_SCHEMAS
+1277 ALL_XML_SCHEMAS2
+1280 UTL_RAW
+1282 GV$XSTREAM_CAPTURE
+1284 V$XSTREAM_CAPTURE
+1286 GV$GOLDENGATE_CAPTURE
+1288 V$GOLDENGATE_CAPTURE
+1290 GV$XSTREAM_TRANSACTION
+1292 V$XSTREAM_TRANSACTION
+1294 GV$GOLDENGATE_TRANSACTION
+1296 3rd times a charm
+   1 session3
+   3 session1
+   2 lock_me
+
+update lock_me set object_name='session3' where object_id=1296;
+commit;
+
+
+-- sysdba
+col W_SID format 99990
+col W_SER format 999990
+col BL_SID format 99990
+col BL_SER format 999990
+col w_state format a40
+select session_id W_SID, session_serial# W_SER, blocking_session BL_SID, blocking_session_serial# BL_SER,
+   DECODE(session_state, 'WAITING', event, session_state) W_STATE, xid
+   from v$active_session_history where session_id=1 and session_serial#=13027
+   and sample_time > sysdate-(1/24);
+no rows selected
+
+select session_id W_SID, session_serial# W_SER, blocking_session BL_SID, blocking_session_serial# BL_SER,
+   DECODE(session_state, 'WAITING', event, session_state) W_STATE, xid
+   from v$active_session_history where session_id=2566 and session_serial#=4605
+   and sample_time > sysdate-(1/24);
+no rows selected
+
+select session_id W_SID, session_serial# W_SER, username, 
+   DECODE(session_state, 'WAITING', event, session_state) W_STATE, xid
+   from v$active_session_history ash join dba_users du on ash.user_id=du.user_id
+where sample_time > sysdate-(10/1440) and username!='SYS' order by session_id;
+W_SID   W_SER USERNAME                       W_STATE                                  XID
+----- ------- ------------------------------ ---------------------------------------- ----------------
+    1   13047 DBSNMP                         db file sequential read                  0300130025070000
+ 2281   11381 DBSNMP                         ON CPU
+ 2946    7933 DBSNMP                         ON CPU
+
+select lf.group# GP, vl.status, lf.member, first_time, next_time
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+GP STATUS   MEMBER                                                       FIRST_TIME     NEXT_TIME
+-- -------- ------------------------------------------------------------ -------------- --------------
+ 1 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                  FEB09 12:27:45 FEB10 17:12:57
+ 2 CURRENT  D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                  FEB10 17:12:57
+ 3 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                  FEB09 12:06:42 FEB09 12:27:45
+
+alter system switch logfile;
+
+select lf.group# GP, vl.status, lf.member, first_time, next_time
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+GP STATUS   MEMBER                                                       FIRST_TIME     NEXT_TIME
+-- -------- ------------------------------------------------------------ -------------- --------------
+ 1 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                  FEB09 12:27:45 FEB10 17:12:57
+ 2 ACTIVE   D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                  FEB10 17:12:57 FEB10 17:29:33
+ 3 CURRENT  D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                  FEB10 17:29:33
+
+
+exec dbms_logmnr.add_logfile('D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG');
+exec dbms_logmnr.start_logmnr(options => dbms_logmnr.dict_from_online_catalog);
+
+col sql_redo format a80
+select scn, XID, sql_redo from v$logmnr_contents where XID='0300130025070000' order by timestamp;
+(various DBSNMP activities)
+
+select scn, XID, sql_redo from v$logmnr_contents where sql_redo like '%LOCK_ME%' order by timestamp;
+          SCN XID              SQL_REDO
+------------- ---------------- --------------------------------------------------------------------------------
+ 130648318377 0A00140071820000 insert into "TBL_OWNER"."LOCK_ME"("OBJECT_ID","OBJECT_NAME") values ('1','sessio
+                               n1');
+
+ 130648318428 0A00120048820000 delete from "TBL_OWNER"."LOCK_ME" where "OBJECT_ID" = '370' and "OBJECT_NAME" =
+                               'TABLE_PRIVILEGE_MAP' and ROWID = 'AAAU2TAAEAAAACBAAH';
+
+ 130648318427 0A00120048820000 update "TBL_OWNER"."LOCK_ME" set "OBJECT_NAME" = 'session1' where "OBJECT_NAME"
+                               = 'lock_me' and ROWID = 'AAAU2TAAEAAAACBAAa';
+
+ 130648318462 060009003C090000 select * from "TBL_OWNER"."LOCK_ME" where ROWID = 'AAAU2TAAEAAAACBAAC' for updat
+                               e;
+...
+ 130648318463 060009003C090000 update "TBL_OWNER"."LOCK_ME" set "OBJECT_NAME" = 'session3' where "OBJECT_NAME"
+                               = '3rd times a charm' and ROWID = 'AAAU2TAAEAAAACBAAY';
+
+ 130648318461 060009003C090000 insert into "TBL_OWNER"."LOCK_ME"("OBJECT_ID","OBJECT_NAME") values ('2','lock_m
+                               e');
+
+exec DBMS_LOGMNR.END_LOGMNR;
+
+
+############################
+# V$SESSION -> LOGMNR test #
+############################
+
+Is this connection possible on a consistent basis?
+
+Test
+1. log switch
+2. session 1 runs 1 txn
+3. session 2 runs 2 txns
+4. session 3 runs 3 txns
+(get sid for each session)
+5. log switch
+6. get XID from ASH
+7. try to find XID in logmnr
+
+-- sysdba
+set numf 999999999990
+alter session set nls_date_format='MONDD HH24:MI:SS';
+col GP format 90
+col status format a8
+column member format a60
+select lf.group# GP, vl.status, lf.member, first_time, next_time
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+GP STATUS   MEMBER                                                       FIRST_TIME     NEXT_TIME
+-- -------- ------------------------------------------------------------ -------------- --------------
+ 1 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                  FEB03 11:47:47 FEB03 17:53:30
+ 2 CURRENT  D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                  FEB03 17:53:30
+ 3 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                  FEB02 15:23:39 FEB03 11:47:47
+
+alter system switch logfile;
+
+select lf.group# GP, vl.status, lf.member, first_time, next_time
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+GP STATUS   MEMBER                                                       FIRST_TIME     NEXT_TIME
+-- -------- ------------------------------------------------------------ -------------- --------------
+ 1 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                  FEB03 11:47:47 FEB03 17:53:30
+ 2 ACTIVE   D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                  FEB03 17:53:30 FEB09 12:06:42
+ 3 CURRENT  D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                  FEB09 12:06:42
+
+-- tbl_owner
+SELECT sys_context('USERENV', 'SID') FROM DUAL;
+2851
+
+insert into lock_me values (1, 'session1');
+commit;
+
+-- intermittent session
+SELECT sys_context('USERENV', 'SID') FROM DUAL;
+2851
+grant select, insert, update, delete on lock_me to apex_table_owner;
+
+-- session 2
+SELECT sys_context('USERENV', 'SID') FROM DUAL;
+2851   14797 TBL_OWNER
+
+update lock_me set object_name='session2' where object_id=1;
+delete from lock_me where object_id=373;
+commit;
+
+
+-- session 3
+SELECT sys_context('USERENV', 'SID') FROM DUAL;
+2851   14799 TBL_OWNER
+
+revoke select, insert, update, delete on lock_me from apex_table_owner;
+insert into lock_me values (3, 'lock_me');
+
+select * from lock_me for update;
+T_ID OBJECT_NAME
+---- --------------------------
+ 100 ORA$BASE
+ 116 DUAL
+ 117 DUAL
+ 280 MAP_OBJECT
+ 365 SYSTEM_PRIVILEGE_MAP
+ 367 SYSTEM_PRIVILEGE_MAP
+ 368 TABLE_PRIVILEGE_MAP
+ 370 TABLE_PRIVILEGE_MAP
+ 371 STMT_AUDIT_OPTION_MAP
+1081 DM$EXPIMP_ID_SEQ
+1253 STANDARD
+1255 DBMS_STANDARD
+1256 DBMS_STANDARD
+1276 ALL_XML_SCHEMAS
+1277 ALL_XML_SCHEMAS2
+1280 UTL_RAW
+1282 GV$XSTREAM_CAPTURE
+1284 V$XSTREAM_CAPTURE
+1286 GV$GOLDENGATE_CAPTURE
+1288 V$GOLDENGATE_CAPTURE
+1290 GV$XSTREAM_TRANSACTION
+1292 V$XSTREAM_TRANSACTION
+1294 GV$GOLDENGATE_TRANSACTION
+1296 3rd times a charm
+   1 session2
+   3 lock_me
+
+update lock_me set object_name='session3' where object_id=1;
+
+commit;
+
+
+-- sysdba
+col W_SID format 99990
+col W_SER format 999990
+col blocking_session format 99990
+col blocking_session_serial# format 999990
+select session_id W_SID, session_serial# W_SER, blocking_session, blocking_session_serial#,
+   DECODE(session_state, 'WAITING', event, session_state) W_STATE, xid
+   from v$active_session_history where session_id=2851 and session_serial#=14797
+   and sample_time > sysdate-(1/24);
+no rows selected
+
+select session_id W_SID, session_serial# W_SER, blocking_session, blocking_session_serial#,
+   DECODE(session_state, 'WAITING', event, session_state) W_STATE, xid
+   from v$active_session_history where session_id=2851 and session_serial#=14799
+   and sample_time > sysdate-(1/24);
+no rows selected
+
+select session_id W_SID, session_serial# W_SER, blocking_session, blocking_session_serial#,
+   DECODE(session_state, 'WAITING', event, session_state) W_STATE, xid
+   from v$active_session_history where session_id=2851 and sample_time > sysdate-(1/24);
+ W_SID   W_SER BLOCKING_SESSION BLOCKING_SESSION_SERIAL# W_STATE                                  XID
+------ ------- ---------------- ------------------------ ---------------------------------------- ----------------
+  2851   14793                                           db file sequential read                  040014002D070000
+
+(depending on ASH is not reliable)
+
+
+select lf.group# GP, vl.status, lf.member, first_time, next_time
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+GP STATUS   MEMBER                                                       FIRST_TIME     NEXT_TIME
+-- -------- ------------------------------------------------------------ -------------- --------------
+ 1 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                  FEB03 11:47:47 FEB03 17:53:30
+ 2 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                  FEB03 17:53:30 FEB09 12:06:42
+ 3 CURRENT  D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                  FEB09 12:06:42
+
+alter system switch logfile;
+
+select lf.group# GP, vl.status, lf.member, first_time, next_time
+from v$logfile lf, v$log vl where lf.group#=vl.group#;
+GP STATUS   MEMBER                                                       FIRST_TIME     NEXT_TIME
+-- -------- ------------------------------------------------------------ -------------- --------------
+ 1 CURRENT  D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO01.LOG                  FEB09 12:27:45
+ 2 INACTIVE D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO02.LOG                  FEB03 17:53:30 FEB09 12:06:42
+ 3 ACTIVE   D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG                  FEB09 12:06:42 FEB09 12:27:45
+
+
+exec dbms_logmnr.add_logfile('D:\ORADATA\ACTAPX\ORACLE\ORADATA\REDO03.LOG');
+exec dbms_logmnr.start_logmnr(options => dbms_logmnr.dict_from_online_catalog);
+
+col sql_redo format a80
+select scn, XID, sql_redo from v$logmnr_contents where XID='040014002D070000' order by timestamp;
+
+
+###################
+# FLASHBACK QUERY #
+###################
+
+-- login to session 1
+ SID    SERIAL# OSUSER                         PROGRAM
+---- ---------- ------------------------------ ---------------
+ 382       2725 dejesusk                       sqlplus.exe
+
+update lock_me set object_name='my table' where object_id=1;
+2 rows updated.
+
+
+-- login to session 2
+  SID    SERIAL# OSUSER                         PROGRAM
+----- ---------- ------------------------------ ---------------
+  382       2725 dejesusk                       sqlplus.exe
+  477       3379 dejesusk                       sqlplus.exe
+
+delete from lock_me where object_name='session1';
+(hangs)
+
+-- as sysdba
+  SID SERIAL# USERNAME             BL_SID BL_SER BL_USERNAME          OBJECT_NAME     LOCKED_MODE
+----- ------- -------------------- ------ ------ -------------------- --------------- ------------------
+  477    3379 TBL_OWNER               382   2725 TBL_OWNER            LOCK_ME         Row Exclusive
+
+-- session 1
+commit;
+
+-- session 2
+rollback;
+
+
+-- sysdba
+with blocked as (
+ select sid blocked, serial#, username, blocking_session
+ from v$session  as of timestamp systimestamp - interval '10' minute
+ where blocking_session is not null
+),
+blocking as (
+ select sid blocking, serial# bl_serial#, username bl_username
+ from v$session  as of timestamp systimestamp - interval '10' minute
+),
+obj_info as (
+ select l.session_id, o.object_name, l.object_id,
+ decode(l.locked_mode,   1, 'No Lock',
+        2, 'Row Share',
+        3, 'Row Exclusive',
+        4, 'Shared Table',
+        5, 'Shared Row Exclusive',
+        6, 'Exclusive') locked_mode
+ from v$locked_object l, dba_objects o
+ where o.object_id = l.object_id
+)
+select blocked "SID", serial#, username, blocking "BL_SID", bl_serial# "BL_SER", bl_username, object_name, locked_mode
+from blocked, blocking, obj_info
+where blocking = blocking_session
+and session_id = blocking_session;
+
+
+select sid blocked, serial#, username, blocking_session
+ from v$session  
+versions between timestamp systimestamp - interval '10' minute
+ and systimestamp - interval '1' second
+where blocking_session is not null;
+
+
+
+from blocked, blocking, obj_info as of timestamp to_timestamp(sysdate-10/1440)
+
+
