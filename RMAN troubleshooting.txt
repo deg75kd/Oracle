@@ -1,0 +1,69 @@
+##############
+# RMAN-06183 #
+##############
+
+What:		RMAN-06183: datafile or datafile copy string (file number string) larger than MAXSETSIZE 
+When:		EDMAM and DSRM backups - 6/19/16
+Changes:	Changed max file sizes to 32000 MB last week
+
+RMAN> show all;
+RMAN configuration parameters for database with db_unique_name DSRM are:
+CONFIGURE RETENTION POLICY TO REDUNDANCY 1;
+CONFIGURE BACKUP OPTIMIZATION ON;
+CONFIGURE DEFAULT DEVICE TYPE TO DISK;
+CONFIGURE CONTROLFILE AUTOBACKUP ON;
+CONFIGURE CONTROLFILE AUTOBACKUP FORMAT FOR DEVICE TYPE DISK TO '/orambackup/DR/dsrm/rman/control_%d_%F';
+CONFIGURE DEVICE TYPE DISK BACKUP TYPE TO COMPRESSED BACKUPSET PARALLELISM 3;
+CONFIGURE DATAFILE BACKUP COPIES FOR DEVICE TYPE DISK TO 1; # default
+CONFIGURE ARCHIVELOG BACKUP COPIES FOR DEVICE TYPE DISK TO 1; # default
+CONFIGURE CHANNEL DEVICE TYPE DISK FORMAT   '/orambackup/DR/dsrm/rman/BK_%d_%s_%p_%t';
+CONFIGURE MAXSETSIZE TO 32 G;
+CONFIGURE ENCRYPTION FOR DATABASE OFF; # default
+CONFIGURE ENCRYPTION ALGORITHM 'AES128'; # default
+CONFIGURE COMPRESSION ALGORITHM 'BASIC' AS OF RELEASE 'DEFAULT' OPTIMIZE FOR LOAD TRUE ; # default
+CONFIGURE ARCHIVELOG DELETION POLICY TO NONE; # default
+CONFIGURE SNAPSHOT CONTROLFILE NAME TO '/orambackup/DR/dsrm/rman/snap_dsrm.f';
+
+
+##############
+# RMAN-03002 #
+# RMAN-06172 #
+##############
+
+What:		RMAN-03002: failure of restore command at 05/17/2017 16:06:40
+			RMAN-06172: no AUTOBACKUP found or specified handle is not a valid copy or piece
+When:		restore controlfile from '/orapbackup03/.snapshot/daily.2017-05-14_0010/DR/aimrmp/rman)/control_AIMRMP_c-1414699517-20170514-00';
+Fix:		check mount point; try to copy file to another location
+
+
+##############
+# RMAN-06054 #
+##############
+
+What:		RMAN-06054: media recovery requesting unknown archived log for thread 1 with sequence 103912 and starting SCN of 10942910694801
+When:		during incomplete recovery
+Fix:		alter database open resetlogs;
+
+
+##############
+# ORA-01547  #
+# ORA-01152  #
+# RMAN-06025 #
+##############
+
+What:		ORA-01547: warning: RECOVER succeeded but OPEN RESETLOGS would get error below
+			ORA-01152: file 1 was not restored from a sufficiently old backup
+			ORA-01110: data file 1: '/database/cdsrt01/oradata/system01.dbf'
+			RMAN-03002: failure of recover command at 07/01/2019 14:57:01
+			RMAN-06053: unable to perform media recovery because of missing log
+			RMAN-06025: no backup of archived log for thread 1 with sequence 82613 and starting SCN of 10983371086225 found to restore
+When:		point-in-time recovery
+run
+{
+    SET UNTIL SEQUENCE 83749 THREAD 1;
+    restore database;
+    recover database;
+    ALTER DATABASE OPEN RESETLOGS;
+}
+
+

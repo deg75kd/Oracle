@@ -1,0 +1,136 @@
+Restore Files from Tape Backup
+==============================
+
+bk*
+snap_obieed.f
+control*
+catalog.cmd
+nocatalog.cmd
+
+
+Restore Location on SandBox
+============================
+
+
+Update TNSNAMES.ORA file - Change Host (Package) Name to Physical Server Name
+===================================================================
+cp /nomove/app/oracle/tns_admin/tnsnames.ora /nomove/app/oracle/tns_admin/tnsnames.ora.20170603
+
+idevt, idevt.world =
+  (DESCRIPTION = (ADDRESS_LIST = (ADDRESS = (COMMUNITY = tcp.world)
+  (PROTOCOL = TCP)(HOST = uxs33.conseco.com)(PORT = 1521)))
+  (CONNECT_DATA = (SID = idevt)))
+
+# Create all Database directory structures
+
+mkdir /move/testdb01/idevt
+mkdir /move/testdb01/idevt/idevt_adm01
+mkdir /move/testdb01/idevt/idevt_arch01
+mkdir /move/testdb01/idevt/idevt_redo01
+mkdir /move/testdb01/idevt/idevt_redo02
+mkdir /move/testdb01/idevt/idevt01
+
+cd /move
+sudo ln -s /move/testdb01/idevt/idevt_adm01 idevt_adm01
+sudo ln -s /move/testdb01/idevt/idevt_arch01 idevt_arch01
+sudo ln -s /move/testdb01/idevt/idevt_redo01 idevt_redo01
+sudo ln -s /move/testdb01/idevt/idevt_redo02 idevt_redo02
+sudo ln -s /move/testdb01/idevt/idevt01 idevt01 
+
+mkdir /move/idevt01/oradata
+mkdir /move/idevt01/arch
+mkdir /move/idevt_adm01/admin
+mkdir /move/idevt_adm01/admin/audit
+mkdir /move/idevt_adm01/admin/bdump
+mkdir /move/idevt_adm01/admin/cdump
+mkdir /move/idevt_adm01/admin/create
+mkdir /move/idevt_adm01/admin/pfile
+mkdir /move/idevt_adm01/admin/udump
+mkdir /move/idevt_redo01/oractl
+mkdir /move/idevt_redo02/oractl
+mkdir /move/idevt_redo01/oralog
+mkdir /move/idevt_redo02/oralog
+
+Update .profile 
+===============
+cp ~/.profile ~/.profile.20170603
+vi ~/.profile
+
+alias idevt='. $ORA_SETENV_SCRIPT_PATH/setidevt.sh'
+
+Update /etc/oratab
+==================
+vi /etc/oratab
+
+idevt:/nomove/app/oracle/db/11g/6:N
+
+Build the Set Environment Script
+================================
+cd /nomove/app/oracle/setenv
+sed "s/infdqd/idevt/g" setinfdqd.sh > /nomove/app/oracle/setenv/setidevt.sh
+
+
+Create Db_Links
+===============
+./nomove/app/oracle/scripts/mk_link.sh idevt
+(OR)
+
+cd $ORACLE_HOME/dbs
+ln -fs /move/idevt_adm01/admin/pfile/initidevt.ora $ORACLE_HOME/dbs/initidevt.ora
+ln -fs /move/idevt_adm01/admin/pfile/spfileidevt.ora $ORACLE_HOME/dbs/spfileidevt.ora
+ln -fs /move/idevt_adm01/admin/pfile/orapwidevt $ORACLE_HOME/dbs/orapwidevt
+
+Create pwd and init files
+=========================
+orapwd file=/move/idevt_adm01/admin/pfile/orapwidevt
+sed "s/<newdb>/idevt/g" /nomove/app/oracle/scripts/init11g.ora > /move/idevt_adm01/admin/pfile/initidevt.ora
+
+Set environment
+===============
+. ~/.profile
+idevt
+
+Restore DB
+==========
+rman target /
+startup nomount pfile='/move/idevt_adm01/admin/pfile/initidevt.ora';
+
+-- From 4th section of control file backup control_IDEVT_c-1950509621-20170603-17
+set dbid 1950509621;
+
+run {
+  #set SNAPSHOT CONTROLFILE NAME TO '/oratbackup/DR/idevt/rman/nonDR/obieed/snap_obieed.f';
+  allocate channel c1 device type disk;
+  #set controlfile autobackup format for device type disk to '/oratbackup/DR/idevt/rman/control_%d_%F';
+  #restore spfile to '/move/idevt_adm01/admin/pfile/spfileidevt.ora' from autobackup;
+  restore spfile to '/move/idevt_adm01/admin/pfile/spfileidevt.ora' from '/oratbackup/DR/idevt/rman/control_IDEVT_c-1950509621-20170603-17';
+  restore controlfile to '/move/idevt_redo01/oractl/control.ctl' from '/oratbackup/DR/idevt/rman/control_IDEVT_c-1950509621-20170603-17';
+  restore controlfile to '/move/idevt_redo02/oractl/control.ctl' from '/oratbackup/DR/idevt/rman/control_IDEVT_c-1950509621-20170603-17';
+}
+shutdown immediate;
+
+sqlplus / as sysdba
+CREATE spfile='/move/idevt_adm01/admin/pfile/spfileidevt.ora' from pfile='/move/idevt_adm01/admin/pfile/initidevt.ora';
+exit
+
+rman target /
+startup mount;
+catalog start with "/oratbackup/DR/idevt/rman/BK_IDEVT";
+
+Do you really want to catalog the above files (enter YES or NO)? YES
+
+run
+{
+	# SET UNTIL SCN 9246937395993;
+	# SET UNTIL SEQUENCE=integer THREAD = integer;
+	# SET UNTIL TIME 'date_string';
+	# SET UNTIL RESTORE POINT 'restore_point_name';
+	restore database;
+	recover database;
+}
+sql "alter database open resetlogs";
+
+
+
+Start the listener on SandBox to connect to the database from outside of SandBox.
+Update TNSNAMES.ora file on your Desktop PC to connect to database on SandBox.

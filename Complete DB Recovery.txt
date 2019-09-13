@@ -1,0 +1,40 @@
+-- Requirements:
+	-- have lost some or all datafiles and your goal is to recover all changes
+	-- have not lost all current control files or an entire online redo log group
+	-- have an image copy or uncompressed backup of DB
+	-- have all archivelog files since last backup
+
+-- if all current control files not available, either
+	-- 1. copy an available copy to other locations, or
+	-- 2. edit parameter file to only refer to valid copies
+
+-- edit parameter file to change location of current control files
+-- start DB in mount mode using pfile
+STARTUP PFILE=D:\Oracle\Product\11.2.0\dbhome_11202\database\INITactcut.ora MOUNT;
+
+-- connect to rman
+rman target sys
+
+-- check which channels configured
+SHOW ALL;
+
+-- if default device is not correct, change it
+CONFIGURE DEFAULT DEVICE TYPE TO DISK;
+
+-- restore DB
+RESTORE DATABASE;
+
+-- recover DB
+RECOVER DATABASE;
+
+-- open DB
+ALTER DATABASE OPEN;
+
+-- if original controlfile locations are available,
+	-- copy file to those locations and restart DB
+-- if controlfiles need to be placed in new locations,
+	-- copy file to those locations
+	-- edit pfile
+	-- restart DB with edited pfile
+	-- create spfile from pfile
+	-- restart DB

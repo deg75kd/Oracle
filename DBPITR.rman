@@ -1,0 +1,10 @@
+run
+{
+	# un-comment one of the following
+	# set UNTIL TIME "TO_DATE('27/08/2013 06:00','DD/MM/YYYY HH24:MI')";
+	SET UNTIL SEQUENCE 187 THREAD 1;
+	# SET UNTIL SCN 53778143409;
+	restore database;
+	recover database;
+	ALTER DATABASE OPEN RESETLOGS;
+}

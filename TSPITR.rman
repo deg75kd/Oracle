@@ -1,0 +1,6 @@
+run
+{
+	ALLOCATE AUXILIARY CHANNEL c1 DEVICE TYPE DISK;
+	recover tablespace 'USERS' until time "to_date('2011-02-07 16:07:00', 'YYYY-MM-DD HH24:MI:SS')";
+	RELEASE CHANNEL c1;
+}

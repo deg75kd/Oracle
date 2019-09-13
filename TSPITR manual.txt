@@ -1,0 +1,49 @@
+************************************************************
+*                                                          *
+* Performing RMAN TSPITR Using Your Own Auxiliary Instance *
+*                                                          *
+************************************************************
+
+
++++ Preparing Your Own Auxiliary Instance for RMAN TSPITR +++
+
+
+Step 1: Create an Oracle Password File for the Auxiliary Instance
+
+orapwd file=<fname> password=<password> entries=<users> force=<y/n>
+  file - name of password file (mand),
+  password - password for SYS (mand),
+  entries - maximum number of distinct DBAs and OPERs (opt),
+  force - whether to overwrite existing file (opt)
+(eg. orapwd FILE=acct.pwd PASSWORD=secret ENTRIES=30)
+
+
+Step 2: Create an Initialization Parameter File for the Auxiliary Instance
+
+Required parameters:
+DB_NAME - The same name as the target database
+DB_UNIQUE_NAME - A value different from any database in the same Oracle home
+REMOTE_LOGIN_PASSWORDFILE - Set to EXCLUSIVE when connecting to the auxiliary instance by means of a password file
+COMPATIBLE - The same value as the parameter in the target database
+DB_BLOCK_SIZE - If this initialization parameter is set in the target database, then it must be set to the same value in the auxiliary instance.
+LOG_FILE_NAME_CONVERT - 
+(Query V$LOGFILE.MEMBER, to obtain target instance online log names
+* Set other parameters as needed, including the parameters that allow you to connect as SYSDBA through Oracle Net
+
+
+Step 3: Check Oracle Net Connectivity to the Auxiliary Instance
+
+The auxiliary instance must have a valid net service name. Before proceeding, use SQL*Plus to ensure that you can establish a connection to the auxiliary instance
+
+
+
++++ Executing TSPITR with Your Own Auxiliary Instance +++
+
+
+Step 1: Start the Auxiliary Instance in NOMOUNT Mode
+
+specifying a parameter file if necessary
+STARTUP NOMOUNT PFILE='/tmp/initAux.ora'
+* Do not create a control file or try to mount or open the auxiliary instance 
+
+

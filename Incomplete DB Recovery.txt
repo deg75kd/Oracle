@@ -1,0 +1,55 @@
+-- Requirements:
+	-- Using image copy of DB (should work for backups too)
+	-- Using archivelog files and backups of controlfiles
+
+-- connect to rman
+rman target sys
+
+RESTORE SPFILE FROM '/oradbackup/DR/obieed/rman/control_OBIEED_c-3969646556-20150131-00';
+RESTORE SPFILE TO '/move/obieed_adm01/admin/pfile/initobieed.ora' FROM '/oradbackup/DR/obieed/rman/control_OBIEED_c-3969646556-20150131-00';
+RESTORE SPFILE FROM AUTOBACKUP;
+
+-- put DB in nomount mode
+STARTUP NOMOUNT;
+
+-- check which channels are configured
+SHOW ALL;
+
+-- set device type if not correct
+CONFIGURE DEFAULT DEVICE TYPE TO DISK;
+
+-- restore controlfile
+-- find location of backup controlfiles and identify the most recent
+-- find DBID from 1st number of controlfile backup filename
+SET DBID=3969646556;
+RESTORE CONTROLFILE FROM '/oradbackup/DR/obieed/rman/control_OBIEED_c-3969646556-20150131-00';
+
+SET DBID=1232964882;
+RESTORE CONTROLFILE FROM '/mnt/netapp_original/orcl/ORCL_20150226_15_1232964882_0fq0969n';
+
+
+-- mount DB
+ALTER DATABASE MOUNT;
+
+-- log into sqlplus
+-- find sequence and thread of most recent archivelog
+-- find archivelog naming format
+-- %S - log seq num, zero filled
+-- %R - resetlogs ID, ensures unique names
+-- %T - thread num
+SHOW PARAMETER LOG;
+
+-- restore and recover up to most recent archivelog file
+-- add 1 to highest sequence number
+run
+{
+	# SET UNTIL SEQUENCE 36 THREAD 1;
+	restore database;
+	recover database;
+}
+
+-- open DB
+ALTER DATABASE OPEN RESETLOGS;
+
+
+

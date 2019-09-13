@@ -1,0 +1,50 @@
+# 11g
+mkdir /database/cigfdsd01
+mkdir /database/cigfdsd01/oradata
+mkdir /database/cigfdsd_admn01
+mkdir /database/cigfdsd_admn01/admin
+mkdir /database/cigfdsd_admn01/admin/adump
+mkdir /database/cigfdsd_admn01/admin/pfile
+mkdir /database/cigfdsd_admn01/admin/utldump
+mkdir /database/cigfdsd_redo01
+mkdir /database/cigfdsd_redo01/oralog
+mkdir /database/cigfdsd_redo01/oractl
+mkdir /database/cigfdsd_redo02
+mkdir /database/cigfdsd_redo02/oralog
+mkdir /database/cigfdsd_redo02/oractl
+mkdir /database/cigfdsd_arch01
+mkdir /database/cigfdsd_arch01/arch
+sed "s/<newdb>/cigfdsd/g" /app/oracle/scripts/init11g.ora > /database/cigfdsd_admn01/admin/pfile/initcigfdsd.ora
+
+# 12c
+mkdir /database/cbpad01
+mkdir /database/cbpad01/oradata
+mkdir /database/cbpad01/oradata/pdbseed
+mkdir /database/cbpad_admn01
+mkdir /database/cbpad_admn01/admin
+mkdir /database/cbpad_admn01/admin/adump
+mkdir /database/cbpad_admn01/admin/pfile
+mkdir /database/cbpad_admn01/admin/utldump
+mkdir /database/cbpad_redo01
+mkdir /database/cbpad_redo01/oralog
+mkdir /database/cbpad_redo01/oractl
+mkdir /database/cbpad_redo02
+mkdir /database/cbpad_redo02/oralog
+mkdir /database/cbpad_redo02/oractl
+mkdir /database/cbpad_arch01
+mkdir /database/cbpad_arch01/arch
+sed "s/<newcdb>/cbpad/g;s/<cdb_short>/cbpad/g" /app/oracle/scripts/init12c.ora > /database/cbpad_admn01/admin/pfile/initcbpad.ora
+
+ln -f -s /database/cbpad_admn01/admin/pfile/initcbpad.ora ${ORACLE_HOME}/dbs/initcbpad.ora
+
+rman target /
+startup nomount;
+restore controlfile from '/app/rman/gswe8/control_CBPAD_c-2287757610-20170413-00';
+sql "alter database mount";
+run {
+	allocate channel ch1 device type disk;
+	allocate channel ch2 device type disk;
+	restore database;
+}
+sql "alter database open resetlogs";
+

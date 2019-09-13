@@ -1,0 +1,839 @@
+-- connect to rman
+RMAN TARGET user@alias
+RMAN TARGET sys@alias
+
+-- connect to DB and catalog
+rman target / catalog rman@rman11p
+rman target / catalog rman@rman11m
+
+-- connect to catalog only
+rman
+connect catalog rman@rman11p
+
+-- connect to DB only
+connect target sys@prod
+
+-- archived backups
+cd /orapbackup/.snapshot
+
+
+-- ##############
+-- # RMAN items #
+-- ##############
+
+backup
+backup of controlfile
+backup of database
+backup of datafile <filenum>
+backup of archivelog all
+backupset
+archivelog all
+copy
+copy of controlfile
+copy of database
+copy of datafile <filenum>
+copy of archivelog all
+archivelog '<filename>'
+backupset primarykey
+backuppiece primarykey
+controlfilecopy primarykey
+controlfilecopy '<filename>'
+datafilecopy all
+
+
+-- ###############
+-- # Catalog Use #
+-- ###############
+
+-- register DB
+rman 
+target / 
+catalog rco@rman12d
+shutdown immediate;
+startup mount;
+register database;
+
+-- unregister DB (must be connected to catalog)
+unregister database 'db_name';
+
+-- verify registration successful
+report schema;
+
+-- resync catalog
+resync catalog;
+
+-- create catalog user
+CREATE USER rco IDENTIFIED BY password
+  DEFAULT TABLESPACE cattbs
+  QUOTA UNLIMITED ON cattbs;
+GRANT recovery_catalog_owner TO rco;
+
+-- create catalog
+CONNECT CATALOG rco@catdb
+CREATE CATALOG;
+
+
+-- ################
+-- # Summary Info #
+-- ################
+
+-- get summary of backups (doesn't show file names)
+LIST BACKUP SUMMARY;
+list backup of database summary;
+LIST BACKUP BY FILE;
+LIST BACKUP SUMMARY COMPLETED BETWEEN '01-FEB-11' AND '03-MAR-11';
+LIST BACKUP RECOVERABLE;
+
+-- get summary with file names
+-- level 0 shows DB file names; level 1 shows backup file names
+list backup of database;
+list backup of database completed between '02-AUG-17' AND '02-AUG-17';
+list backup of database completed after '08/01/17';
+list backup completed between '17-DEC-12' AND '18-DEC-12';
+list backupset;
+list backupset COMPLETED BETWEEN '14-FEB-12' AND '15-FEB-12';
+
+
+-- get summary of image copies
+list copy;
+list copy of datafile ;
+
+-- get list of archivelog backups (doesn't show file name)
+list BACKUP OF ARCHIVELOG ALL summary;
+-- get list of archivelog backups (very detailed but hard to read)
+list BACKUP OF ARCHIVELOG ALL;
+-- list logs by archive file
+list BACKUP OF ARCHIVELOG ALL BY FILE;
+
+list BACKUP OF ARCHIVELOG SEQUENCE ;
+list BACKUP OF ARCHIVELOG FROM SEQUENCE ;
+list BACKUP OF ARCHIVELOG SEQUENCE BETWEEN  AND ;
+
+
+list BACKUP OF ARCHIVELOG FROM TIME '07/16/19';
+
+-- list all archive logs
+list archivelog all;
+
+-- list backup of control files
+list backup of controlfile;
+
+-- recoverable
+-- Restricts the list to expired data file backups or copies whose status in the repository is AVAILABLE and which can be used for restore and recovery in the current incarnation of the target database
+LIST COPY RECOVERABLE;
+LIST BACKUP RECOVERABLE;
+
+
+-- check that backup can be restored
+-- xxx = primary key from list command
+VALIDATE BACKUPSET xxx;
+RESTORE DATABASE UNTIL TIME "TO_DATE('23-JUN-2011 10:04','DD-MON-YYYY HH24:MI')" VALIDATE;
+RESTORE DATABASE UNTIL TIME "TO_DATE('30-MAY-2013','DD-MON-YYYY')" VALIDATE;
+
+-- validate
+VALIDATE DATABASE;
+VALIDATE DATABASE ROOT;
+VALIDATE PLUGGABLE DATABASE '';
+VALIDATE DATAFILE '';
+VALIDATE DATAFILECOPY ALL;
+VALIDATE DATAFILECOPY '';
+
+-- verify status of backups in repository against media
+CROSSCHECK BACKUP;
+CROSSCHECK BACKUP COMPLETED BETWEEN '01-FEB-11' AND '03-MAR-11';
+CROSSCHECK BACKUPSET;
+
+-- verify normal archivelogs
+CROSSCHECK ARCHIVELOG ALL;
+-- verify backups of archivelogs
+CROSSCHECK BACKUP OF ARCHIVELOG ALL;
+
+-- verify controlfile backups
+CROSSCHECK BACKUP OF CONTROLFILE;
+
+-- find files that need backup
+report need backup;
+
+-- SQL: find SCN
+-- returns 0 if DB not mounted
+set numwidth 20
+select current_scn from v$database;
+
+-- snapshot controlfile (SNCF file)
+show snapshot controlfile name;
+
+
+-- ############
+-- # Settings #
+-- ############
+
+-- check all parameters
+SHOW ALL;
+
+-- check current retention policy
+show retention policy;
+
+-- set retention policy
+CONFIGURE RETENTION POLICY TO RECOVERY WINDOW OF 31 DAYS;
+
+show archivelog deletion policy;
+
+-- change settings for control file backup
+CONFIGURE CONTROLFILE AUTOBACKUP OFF;
+CONFIGURE CONTROLFILE AUTOBACKUP ON;
+-- check settings
+SHOW CONTROLFILE AUTOBACKUP;
+
+-- reset to default value
+CONFIGURE CONTROLFILE AUTOBACKUP CLEAR;
+
+# Format parameters
+# %c	copy number of the backup piece within a set of duplexed backup pieces
+# %d	database name
+# %e	archived log sequence number
+# %F	Combines the DBID, day, month, year, and sequence (c-IIIIIIIIII-YYYYMMDD-QQ) (only valid for control file autobackup)
+# %f	absolute file number
+# %h	archived redo log thread number
+# %I	DBID - good for determining when DB is refreshed
+# %N	tablespace name
+# %p	Specifies the piece number within the backup set
+# %s	backup set number - running count of files backed up
+# %T	YYYYMMDD
+# %t	backup set time stamp - as 9-digit number
+# %u	8-character name constituted by compressed representations of the backup set or image copy number and the time the backup set or image copy was created
+# %U	convenient shorthand for:
+#		%u_%p_%c = 8char_piece#_copy# (backup piece)
+#		data-D-%d_id-%I_TS-%N_FNO-%f_%u = data-D-dbname_id-DBID_TS-tsname_FNO-file#_8char(image of data file)
+#		arch-D_%d-id-%I_S-%e_T-%h_A-%a_%u (image of archive log)
+#		cf-D_%d-id-%I_%u (image of control file)
+
+# control_%d_%F						control_dbname_c-DBID-YYYYMMDD-seq#
+# BK_%d_%s_%p_%t					BK_dbname_set#_piece#_timestamp
+# data-D-%d_id-%I_TS-%N_FNO-%f_%u	data-D-dbname_id-DBID_TS-tsname_FNO-file#_8char
+
+CONFIGURE CONTROLFILE AUTOBACKUP FORMAT FOR DEVICE TYPE DISK TO '/orapbackup/DR/fdlzp/rman/control_%d_%F';
+/orapbackup/DR/fdlzp/rman/control_<dbname>_c-<DBID>-<date>-<sequence>
+/orapbackup/DR/fdlzp/rman/control_FDLZP_c-2002409717-20170519-15
+
+CONFIGURE CHANNEL DEVICE TYPE DISK FORMAT   '/orapbackup/DR/fdlzp/rman/BK_%d_%s_%p_%t';
+/orapbackup/DR/fdlzp/rman/BK_<dbname>_<set#>_<piece#>_<timestamp>
+/orapbackup/DR/fdlzp/rman/BK_FDLZP_204406_1_944391020
+
+-- check if block change tracking enabled (BCT)
+set lines 150 pages 200
+col filename format a60
+select * from v$block_change_tracking;
+
+-- enable block change tracking (BCT)
+ALTER DATABASE ENABLE BLOCK CHANGE TRACKING USING FILE '/database/Ecc3appsp/cc3appsp_admn01/admin/bct/bct.bt';
+
+
+-- ##########
+-- # Backup #
+-- ##########
+
+# perform level 0 backup w/logs & control file
+run
+{
+      ALLOCATE CHANNEL c1 DEVICE TYPE DISK FORMAT 'U:\flash_recover_actcut\RMAN\%d_%T_%s_%I';
+      backup as compressed backupset incremental level 0 database plus archivelog not backed up 1 times;
+      backup current controlfile;
+}
+
+# perform cumulative level 1 w/logs & control file
+run
+{
+      ALLOCATE CHANNEL c1 DEVICE TYPE DISK FORMAT 'W:\oracle\actcut\flashrecovery\%d_%T_%s_%I';
+      backup as compressed backupset incremental level 1 cumulative database;
+      backup current controlfile;
+}
+
+# backup arch logs that haven't been backed up
+BACKUP AS COMPRESSED BACKUPSET SPFILE PLUS ARCHIVELOG NOT BACKED UP 1 TIMES;
+
+# perform cold level 0 backup w/control file & parameter file
+run
+{
+      ALLOCATE CHANNEL c1 DEVICE TYPE DISK FORMAT '/mnt/netapp/%d_%T_%s_%I_%u';
+	  ALLOCATE CHANNEL c2 DEVICE TYPE DISK FORMAT '/mnt/netapp/%d_%T_%s_%I_%u';
+	  ALLOCATE CHANNEL c3 DEVICE TYPE DISK FORMAT '/mnt/netapp/%d_%T_%s_%I_%u';
+      backup as compressed backupset incremental level 0 database INCLUDE CURRENT CONTROLFILE;
+      #backup current controlfile;
+	  backup spfile;
+}
+
+run
+{
+      ALLOCATE CHANNEL c1 DEVICE TYPE DISK FORMAT '/mnt/netapp/%d_%T_%s_%I_%u';
+	  ALLOCATE CHANNEL c2 DEVICE TYPE DISK FORMAT '/mnt/netapp/%d_%T_%s_%I_%u';
+	  ALLOCATE CHANNEL c3 DEVICE TYPE DISK FORMAT '/mnt/netapp/%d_%T_%s_%I_%u';
+      backup database;
+      backup current controlfile;
+	  backup spfile;
+}
+
+run
+{
+	shutdown immediate;
+	startup mount;
+	backup as compressed backupset incremental level 0 database INCLUDE CURRENT CONTROLFILE;
+	delete noprompt force obsolete;
+}
+
+run
+{
+      ALLOCATE CHANNEL c1 DEVICE TYPE DISK FORMAT '/mnt/netapp/c_%d_%T_%s_%I_%u';
+      backup current controlfile;
+}
+
+run
+{
+      ALLOCATE CHANNEL c1 DEVICE TYPE DISK FORMAT '/mnt/netapp/spfile_%d_%T_%s_%I_%u';
+	  backup spfile;
+}
+
+# backup archivelogs
+backup archivelog all not backed up;
+# backup archivelogs & delete all
+backup archivelog all not backed up delete all input;
+
+
+-- ####################
+-- # Register backups #
+-- ####################
+
+-- catalog pieces
+CATALOG DATAFILECOPY '/disk1/old_datafiles/01_01_2003/users01.dbf';
+CATALOG ARCHIVELOG '/disk1/arch_logs/archive1_731.dbf','/disk1/arch_logs/archive1_732.dbf';
+CATALOG BACKUPPIECE '/disk1/backups/backup_820.bkp';
+
+-- catalog multiple pieces at once
+CATALOG START WITH '/database/ch11hfmd_arch01/arch/';
+
+-- register backup piece with catalog
+CATALOG BACKUPPIECE 'U:\flash_recover_ADMNDEVA\RMAN\ADMNDEVA_20110203_3_742089648';
+
+-- register archivelog with catalog
+CATALOG ARCHIVELOG 'D:\ORADATA\ADMN\ARCHLOGS_02\1_48753_683467614.ARC';
+
+
+-- #######################
+-- # Restore and recover #
+-- #######################
+
+-- restore spfile
+RESTORE SPFILE TO '/tmp/spfileTEMP.ora' FROM AUTOBACKUP;
+RESTORE SPFILE TO PFILE '/move/testdb01/prodd/prodd_adm01/pfile/initprodd.ora' FROM '/oradbackup/DR/prodd/rman/control_PRODD_c-2120819724-20170510-06';
+RESTORE SPFILE TO PFILE '/tmp/lcodTEMP.ora' FROM '/oradbackup/.snapshot/10am.2015-08-23_1000/DR/lcod/rman/control_LCOD_c-1574144534-20150816-00';
+RESTORE SPFILE TO PFILE '/app/oracle/scripts/12cupgrade/initawdmTEMP.ora' FROM TAG TAG20170313T024659;
+
+-- restore controlfile
+-- not using recovery catalog
+-- first find DBID, start in nomount mode
+SET DBID=3533962851;
+RESTORE CONTROLFILE FROM AUTOBACKUP;
+-- or RESTORE CONTROLFILE FROM 'U:\FLASH_RECOVER_ACTCUT\CONTROLFILE\C-3533962851-20110207-03';
+ALTER DATABASE MOUNT;
+
+-- restore controlfile
+-- not using recovery catalog
+-- start in mount mode
+RESTORE CONTROLFILE ... FROM 'media_handle' or TAG 'user_tag';
+
+RESTORE CONTROLFILE TO '/move/dsrp_redo01/oractl/control.ctl' FROM '/orapbackup/DR/dsrp/rman/control_DSRP_c-2663276628-20190513-12';
+
+-- database point-in-time recovery (incomplete recovery)
+-- must be in mount mode
+run
+{
+	# un-comment one of the following
+	SET UNTIL TIME "TO_DATE('26-FEB-14 00:15','DD-MON-YYYY HH24:MI')";
+	#SET UNTIL SEQUENCE 36 THREAD 1;
+	#SET UNTIL SCN 175751810896;
+	restore database;
+	recover database;
+}
+ALTER DATABASE OPEN RESETLOGS;
+
+-- restore database (must recover afterwards)
+RESTORE DATABASE UNTIL TIME "TO_DATE('02-FEB-2011 23:02','DD-MON-YYYY HH24:MI')";
+RESTORE DATABASE UNTIL SCN xxx;
+RESTORE DATABASE FROM 'U:\FLASH_RECOVER_ACTCUT\RMAN\ACTCUT_20110207_9_742500187' FORCE;
+
+-- recover database (use UNTIL clause or will recover to most recent archive log)
+RECOVER DATABASE UNTIL TIME "TO_DATE('02-FEB-2011 23:02','DD-MON-YYYY HH24:MI')";
+RECOVER DATABASE UNTIL SCN xxx;
+ALTER DATABASE OPEN RESETLOGS;
+
+-- reset incarnation
+export NLS_DATE_FORMAT="DD-MON-YYYY HH24:MI:SS"
+-- may be needed if getting the following:
+-- RMAN-20207: UNTIL TIME or RECOVERY WINDOW is before RESETLOGS time
+-- ORA-19723: Cannot recreate plugged in read-only datafile 5
+LIST INCARNATION;
+RESET DATABASE TO INCARNATION x;
+
+-- open DB after incomplete or DBPIT recovery
+-- implicitly issues a RESET DATABASE command which creates new incarnation
+ALTER DATABASE OPEN RESETLOGS;
+
+-- restore archivelog
+RESTORE ARCHIVELOG LIKE 'D:\ORADATA\FLEXI\ARCHLOGS_01\LOG_267123_558020589_1.ARC' FROM TAG TAG20120126T063511;
+RESTORE ARCHIVELOG FROM SEQUENCE &what_seq;
+
+RESTORE ARCHIVELOG SCN BETWEEN 435004831 AND 435114465 FROM TAG TAG20130621T210012;
+-- restore to a different location
+run
+{
+ set archivelog destination to '/oragg/blctdmd';
+ restore archivelog from sequence 89286;
+}
+
+RECOVER [DEVICE TYPE deviceSpecifier] recoverSpec;
+
+recoverSpec
+[recoverObject | blockObject] [recoverOptionList] | recoverOptionList [recoverObject | blockObject]
+
+recoverObject
+COPY OF dbObject [WITH TAG 'tag_name'] | DATAFILECOPY 'filename' | dbObject
+[SKIP [FOREVER] TABLESPACE 'tablespace_name' | TO RESTORE POINT restore_point_name | untilClause]
+
+dbObject
+DATABASE | DATAFILE 'datafileSpec' | TABLESPACE 'tablespace_name'
+
+-- ##########################
+-- # restore DB on new host #
+-- ##########################
+
+-- set environment variables
+
+-- restore parameter file
+rman NOCATALOG
+CONNECT TARGET /
+SET DBID 2120819724;
+STARTUP NOMOUNT
+RUN
+{
+	ALLOCATE CHANNEL c1 DEVICE TYPE disk;
+	RESTORE SPFILE TO PFILE '/move/testdb01/prodd/prodd_adm01/pfile/initprodd.ora' FROM '/oradbackup/DR/prodd/rman/control_PRODD_c-2120819724-20170510-06';
+	SHUTDOWN ABORT;
+}
+EXIT
+
+-- edit parameter file
+
+-- restore control file
+rman NOCATALOG
+CONNECT TARGET /
+STARTUP FORCE NOMOUNT PFILE='/move/testdb01/prodd/prodd_adm01/pfile/initprodd.ora';
+RUN 
+{
+  ALLOCATE CHANNEL c1 DEVICE TYPE disk;
+  RESTORE CONTROLFILE FROM '/oradbackup/DR/prodd/rman/control_PRODD_c-2120819724-20170510-06';
+  ALTER DATABASE MOUNT;
+}
+
+-- find restore point
+set lines 150 pages 200
+alter session set nls_date_format='DD-MON-YYYY HH24:MI:SS';
+col "SCN" format 999999999999990
+select SEQUENCE#, THREAD#, FIRST_TIME, (NEXT_CHANGE#-1) "SCN" from V$LOG_HISTORY 
+where FIRST_CHANGE# = (select max(FIRST_CHANGE#) from V$LOG_HISTORY)
+order by 1,2;
+ SEQUENCE#    THREAD# FIRST_TIME              FIRST_CHANGE#
+---------- ---------- -------------------- ----------------
+    103911          1 10-MAY-2017 02:36:42   10942910692914
+
+-- restore DB
+rman NOCATALOG
+CONNECT TARGET /
+RUN
+{
+  # allocate a channel to the tape device
+  ALLOCATE CHANNEL c1 DEVICE TYPE disk;
+  ALLOCATE CHANNEL c2 DEVICE TYPE disk;
+  ALLOCATE CHANNEL c3 DEVICE TYPE disk;
+  
+  # SET UNTIL TIME "TO_DATE('26-FEB-14 00:15','DD-MON-YYYY HH24:MI:SS')";
+  # SET UNTIL SEQUENCE 36 THREAD 1;
+  SET UNTIL SCN 10942910692914;
+  # restore and recover
+  RESTORE DATABASE;
+  RECOVER DATABASE;
+}
+ALTER DATABASE OPEN RESETLOGS;
+EXIT
+
+
+-- #######################
+-- # Cleanup Old Backups #
+-- #######################
+
+/* CROSSCHECK - confirm contents of repository ************************************/
+
+CROSSCHECK BACKUP;
+CROSSCHECK BACKUPSET;
+
+CROSSCHECK BACKUPSET OF database DEVICE TYPE disk COMPLETED BEFORE 'SYSDATE-1';
+
+CROSSCHECK ARCHIVELOG ALL;
+CROSSCHECK BACKUP OF ARCHIVELOG ALL;
+
+crosscheck backup of controlfile;
+
+
+/* EXPIRED - in repository but not on disk ****************************************/
+
+-- show expired DB backups
+LIST EXPIRED BACKUP OF DATABASE;
+-- list expired archivelogs
+list expired archivelog all;
+
+-- remove expired archivelogs
+DELETE EXPIRED ARCHIVELOG ALL;
+-- don't ask
+DELETE NOPROMPT EXPIRED ARCHIVELOG ALL;
+
+-- remove backups that aren't on disk
+delete expired backup;
+delete expired backupset;
+-- don't ask
+delete noprompt expired backup;
+
+-- remove archivelog backups
+DELETE EXPIRED BACKUP OF ARCHIVELOG ALL;
+
+-- remove controlfile backups that aren't on disk
+delete expired backup of controlfile;
+
+
+/* OBSOLETE - not needed to recover beyond a certain point **************************/
+
+-- set time to keep backups
+CONFIGURE RETENTION POLICY TO RECOVERY WINDOW OF 7 DAYS;
+-- return to default setting 'TO REDUNDANCY 1"
+CONFIGURE RETENTION POLICY TO NONE;
+
+-- see what backup sets/pieces aren't needed for recovery
+REPORT OBSOLETE;
+-- if recovery window not set
+REPORT OBSOLETE RECOVERY WINDOW OF 7 DAYS;
+
+-- remove old backup pieces
+DELETE OBSOLETE RECOVERY WINDOW OF 7 DAYS;
+-- don't ask, just delete
+DELETE NOPROMPT OBSOLETE RECOVERY WINDOW OF of 0 DAYS;
+
+
+/* ARCHIVE LOGS *********************************************************************/
+
+-- remove archivelogs that have been backed up
+DELETE ARCHIVELOG ALL BACKED UP 1 TIMES TO DEVICE TYPE DISK;
+-- don't ask
+DELETE NOPROMPT ARCHIVELOG ALL BACKED UP 1 TIMES TO DEVICE TYPE DISK;
+
+-- delete all archivelogs that were created (completed) over 24 hours ago
+DELETE ARCHIVELOG ALL COMPLETED BEFORE '(SYSDATE-1)' ;
+DELETE ARCHIVELOG ALL COMPLETED BEFORE "TO_DATE('06/22/2014 13:00:00','MM/DD/YY HH24:MI:SS')";
+-- delete all archivelog backups
+DELETE BACKUP OF ARCHIVELOG ALL COMPLETED BEFORE '(SYSDATE-1)' ;
+
+-- delete archivelogs that have been backed up and are older than 24 hours
+DELETE ARCHIVELOG ALL COMPLETED BEFORE '(SYSDATE-1)' BACKED UP 1 TIMES TO DEVICE TYPE DISK;
+DELETE ARCHIVELOG ALL COMPLETED BEFORE "TO_DATE('06/22/2014 13:00:00','MM/DD/YY HH24:MI:SS')" BACKED UP 1 TIMES TO DEVICE TYPE DISK;
+
+-- delete DB backups
+DELETE NOPROMPT BACKUP OF DATABASE COMPLETED BEFORE 'TRUNC(SYSDATE-6)';
+
+-- delete control file backups
+DELETE NOPROMPT BACKUP OF CONTROLFILE COMPLETED BEFORE 'TRUNC(SYSDATE-6)';
+DELETE BACKUP OF CONTROLFILE COMPLETED BEFORE 'TRUNC(SYSDATE-6)';
+
+
+##################
+# Convert Format #
+##################
+
+CONVERT
+
+
+###########
+# Scripts #
+###########
+
+-- calling a script from command line
+rman TARGET / @backup_db.rman
+
+-- calling a script from RMAN prompt
+@backup_db.rman
+
+-- passing variables to a script
+@/tmp/whole_db.rman Q106 2
+
+
+*** Stored Scripts ***
+You can create scripts that are stored inside the Oracle RMAN catalog 
+
+-- create a stored script (only available to the target DB)
+rman target /
+connect catalog rman/secretpass@rmancat
+create script backup_ts_users
+comment 'Tablespace Users Backup'
+{
+     allocate channel c1 type disk format 'c:\temp\%U';
+     backup tablespace users;
+}
+
+-- create a global script available to all DBs
+rman target /
+connect catalog rman/secretpass@rmancat
+create global script backup_ts_users
+comment 'Tablespace Users Backup'
+{
+     allocate channel c1 type disk format 'c:\temp\%U';
+     backup tablespace users;
+}
+
+-- create stored script with variables
+rman target /
+connect catalog rman/secretpass@rmancat
+create script backup_ts_any
+comment 'Any Tablespace Backup'
+{
+     allocate channel c1 type disk format 'c:\temp\%U';
+     backup tablespace &1;
+}
+
+-- replace a script
+replace global script backup_ts_users
+
+-- calling a stored script
+run { execute script backup_ts_users; }
+
+-- calling a stored script with variables
+run { execute script backup_ts_any using 'SYSTEM'; }
+
+-- list stored scripts
+list script names;
+list global script names; 
+
+-- show contents of script
+print global script backup_ts_level1_any;
+
+-- create stored script from a file
+create script backup_ts_users from file 'backup_ts_users.rman';
+
+-- create a file from a stored script
+print script backup_ts_users to file 'backup_ts_users.rman';
+
+
+###########
+# Queries #
+###########
+
+-- get estimated finish time
+set lines 150 pages 200
+SELECT SID, SERIAL#, CONTEXT, SOFAR, TOTALWORK,
+ROUND(SOFAR/TOTALWORK*100,2) "%_COMPLETE", round(time_remaining/60/60,2) "HRS_REM"
+FROM V$SESSION_LONGOPS
+WHERE OPNAME LIKE 'RMAN%'
+AND OPNAME NOT LIKE '%aggregate%'
+AND TOTALWORK != 0 and time_remaining>0
+ORDER BY SOFAR, TOTALWORK;
+
+-- sizes of previous backups (prev 16 days)
+alter session set nls_date_format='DD-MON-YY HH24:MI';
+set lines 120 pages 200
+col "TIME TAKEN" format a15
+col "IN GB" format 99,999
+col "OUT GB" format 9,999.00
+select session_key, start_time, round(input_bytes/1024/1024/1024,0) "IN GB", round(output_bytes/1024/1024/1024,2) "OUT GB", status, input_type, time_taken_display "TIME TAKEN"
+from V$RMAN_BACKUP_JOB_DETAILS 
+where input_type like '%DB%'
+order by session_key, start_time;
+
+-- only shows available backups
+select session_key, round(original_input_bytes/1024/1024/1024,0) "INPUT", round(output_bytes/1024/1024/1024,0) "OUTPUT", start_time
+from V$BACKUP_SET_DETAILS
+where incremental_level=0
+order by session_key, start_time;
+
+-- find the SCN of each datafile
+col File_name format a50
+select HXFIL File_num,substr(HXFNM,1,40) File_name, FHSCN SCN, FHSTA status ,FHRBA_SEQ Sequence from X$KCVFH;
+
+-- find the SCN of the control file
+set numformat 09999999999
+select checkpoint_change#, CONTROLFILE_CHANGE# from v$database;
+
+-- check for archive logs that have not been backed up
+alter session set nls_date_format='MM/DD/YY HH24:MI';
+col NAME format a60
+col FIRST_CHANGE# format 99999999999990
+select THREAD#, SEQUENCE#, FIRST_CHANGE#, FIRST_TIME, NAME, BACKUP_COUNT, DELETED
+from V$ARCHIVED_LOG
+where BACKUP_COUNT=0 and FIRST_TIME >= to_date('&what_start','MM/DD/YY HH24:MI')
+order by 1,2;
+
+
+/* LOGDB RMAN size queries */
+
+-- database is ACTURIS, ADMN, DQI, DW, FLEXI, LOGDB, or WM
+-- input_type is DB INCR or ARCHIVELOG
+
+-- details for every backup
+set lines 150 pages 200
+col "TIMING" format a9
+col "COMP" format 99,990.00
+col "IN GB" format 99,999
+col "OUT GB" format 99,999
+select SESSION_KEY, START_TIME, END_TIME,
+	round(input_bytes/1024/1024/1024,0) "IN GB", 
+	round(output_bytes/1024/1024/1024,0) "OUT GB",
+	STATUS,	INPUT_TYPE, round(COMPRESSION_RATIO,2) "COMP", TIME_TAKEN_DISPLAY "TIMING"
+from ACTSTATS.RMAN_BACKUP_HISTORY
+where database='&what_db' and input_type='&what_type';
+
+-- summary
+set lines 150 pages 200
+col "IN GB" format 99,999
+col "OUT GB" format 99,999
+break on report;
+compute sum avg of "IN GB" "OUT GB" on report;
+select INPUT_TYPE, to_char(START_TIME,'YYYY-MM-DD') "START_TIME", 
+	sum(round(input_bytes/1024/1024/1024,0)) "IN GB", 
+	sum(round(output_bytes/1024/1024/1024,0)) "OUT GB"
+from ACTSTATS.RMAN_BACKUP_HISTORY
+where database='&what_db' and input_type='&what_type'
+group by INPUT_TYPE, to_char(START_TIME,'YYYY-MM-DD')
+order by INPUT_TYPE, START_TIME;
+
+-- summary by day of week
+col "D#" format a2
+col "DAY" format a5
+col "IN-SUM" format 99,999
+col "IN-AVG" format 99,999
+col "OUT-SUM" format 99,999
+col "OUT-AVG" format 99,999
+select INPUT_TYPE, to_char(START_TIME,'D') "D#", to_char(START_TIME,'DY') "DAY",
+	sum(round(input_bytes/1024/1024/1024,0)) "IN-SUM", 
+	avg(round(input_bytes/1024/1024/1024,0)) "IN-AVG", 
+	sum(round(output_bytes/1024/1024/1024,0)) "OUT-SUM",
+	avg(round(output_bytes/1024/1024/1024,0)) "OUT-AVG"
+from ACTSTATS.RMAN_BACKUP_HISTORY
+where database='&what_db' and input_type='&what_type'
+group by INPUT_TYPE, to_char(START_TIME,'D'), to_char(START_TIME,'DY')
+order by to_char(START_TIME,'D');
+
+-- output of last backup job (run from DB)
+select o.output 
+from v$rman_output o, v$rman_backup_job_details d 
+where O.session_recid=d.session_recid 
+and o.session_stamp=d.session_stamp 
+and d.end_time > sysdate-5; 
+
+
+############
+# CNO Jobs #
+############
+
+-- UT/SIT database
+show all;
+report schema;
+delete noprompt force backup;
+backup incremental level=0 database;
+allocate channel for maintenance type disk;
+delete noprompt force obsolete;
+show all;
+report schema;
+release channel;
+
+-- UAT/PROD database 
+show all;
+report schema;
+delete noprompt force backup;
+backup incremental level=0 database plus archivelog;
+allocate channel for maintenance type disk;
+delete noprompt force obsolete;
+show all;
+report schema;
+release channel;
+
+-- archivelogs
+show all;
+report schema;
+backup archivelog all not backed up delete all input;
+delete noprompt force obsolete;
+show all;
+report schema;
+
+-- default settings
+CONFIGURE BACKUP OPTIMIZATION ON;
+CONFIGURE CONTROLFILE AUTOBACKUP ON;
+CONFIGURE MAXSETSIZE TO 32G;
+CONFIGURE DEFAULT DEVICE TYPE TO DISK;
+CONFIGURE DEVICE TYPE DISK PARALLELISM 3;
+CONFIGURE RETENTION POLICY TO REDUNDANCY 1;
+CONFIGURE CONTROLFILE AUTOBACKUP FORMAT FOR DEVICE TYPE DISK TO '[Backup_Dir]/control_%d_%F';
+CONFIGURE CHANNEL DEVICE TYPE DISK FORMAT '[Backup_Dir]/BK_%d_%s_%p_%t';
+CONFIGURE SNAPSHOT CONTROLFILE NAME TO '[Backup_Dir]/snap_[CDB_Name].f';
+CONFIGURE DEVICE TYPE DISK BACKUP TYPE TO COMPRESSED BACKUPSET;
+
+
+###################
+# Troubleshooting #
+###################
+
+-- enable tracing
+rman target / debug trace=/tmp/rman.log
+
+-- extended tracing
+rman debug trace=srdc_rman_backup_debug_20180221.trc log=srdc_rman_backup_output_20180221.log
+connect target /
+set echo on;
+debug on;
+...run commands here...
+debug off;
+
+
+### attempted fixes ###
+Doc ID 457926.1			EXEC DBMS_STATS.GATHER_DICTIONARY_STATS;
+						EXEC DBMS_STATS.GATHER_FIXED_OBJECTS_STATS;
+Doc ID 375386.1			sql "alter session set optimizer_mode=RULE";
+Doc ID 1525917.1		exec dbms_stats.DELETE_TABLE_STATS('SYS','X$KCCRSR')
+Doc ID 14078947.8		exec dbms_stats.DELETE_TABLE_STATS('SYS','X$KCCRSR') - bug 14078947
+Doc ID 1354528.1		patch 10104567 (only has 28 datafiles)
+Doc ID 1525802.1		execute dbms_backup_restore.resetcfilesection(19);
+						select db_key,dbinc_key from rc_database where dbid=<db id>;
+SQL> update node set high_do_recid = 0 where db_key = '<db_key from above query >' and dbinc_key=<dbinc_key from above query>;
+SQL> commit;
+Doc ID 815857.1			
+run { 
+sql "alter session set max_dump_file_size=''UNLIMITED''"; 
+sql "alter session set tracefile_identifier=''hang''" ; 
+sql "alter session set events ''10046 trace name context forever, level 12''"; 
+debug on; 
+backup archivelog all; 
+debug off; 
+}
+
+
+opiodr aborting process unknown ospid (12256266) as a result of ORA-28
+
+
+
+-- test changing parallelism
+run
+{
+   host '/app/oracle/scripts/Rubrik/rubrik_begin_snapshot.sh &1';
+   SET CONTROLFILE AUTOBACKUP FORMAT FOR DEVICE TYPE DISK TO '/rbkbak/ora_&2_arch_ch0/control_%d_%F';
+   show all;
+   report schema;
+   allocate channel ch1 device type disk format '/rbkbak/ora_&2_arch_ch0/arch-%d_%I_%s_%p_%t';
+   backup as compressed backupset archivelog all not backed up delete all input;
+   release channel ch1;
+   show all;
+   report schema;
+   host '/app/oracle/scripts/Rubrik/rubrik_end_snapshot.sh &1';
+}
+
