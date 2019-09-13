@@ -1,0 +1,533 @@
+###########################
+# No logging restore test #
+# w/o TS segregation      #
+# 9/11/2019               #
+###########################
+
+***************************************** Nologging Objects *****************************************
+
+-- LXORAODST02
+OWNER                          OBJECT                         OBJECT_TYPE                    TABLESPACE_NAME
+------------------------------ ------------------------------ ------------------------------ ------------------------------
+CURE_QUEUE                     XPKCURE_QUEUE                  INDEX                          CURE_TBLSP_IDX
+CURE_QUEUE                     XPKMESSAGE_CODE_TYPE           INDEX                          CURE_TBLSP_IDX
+CURE_REF                       INFO_SYS_RLTSHP_TYP            TABLE                          CURE_TBLSP_DATA
+CURE_REF                       INFO_SYS_RLTSHP_TYP_UI01       INDEX                          CURE_TBLSP_IDX
+
+
+***************************************** Cleanup Sandbox *****************************************
+
+-- LXORA12CINFS03
+-- clean up files
+rm -R /database/cdsrt01
+rm -R /database/cdsrt_admn01
+rm -R /database/cdsrt_arch01
+rm -R /database/cdsrt_redo01
+rm -R /database/cdsrt_redo02
+rm -R /database/dsrt01
+
+
+***************************************** Recover *****************************************
+
+-- Directories
+mkdir /database/Edsrt
+mkdir /database/Edsrt/dsrt01
+mkdir /database/Edsrt/dsrt01/oradata
+mkdir /database/Edsrt/dsrt02
+mkdir /database/Edsrt/dsrt02/oradata
+mkdir /database/Ecdsrt
+mkdir /database/Ecdsrt/cdsrt01
+mkdir /database/Ecdsrt/cdsrt01/oradata
+mkdir /database/Ecdsrt/cdsrt01/oradata/pdbseed
+mkdir /database/Ecdsrt/cdsrt_admn01
+mkdir /database/Ecdsrt/cdsrt_admn01/admin
+mkdir /database/Ecdsrt/cdsrt_admn01/admin/adump
+mkdir /database/Ecdsrt/cdsrt_admn01/admin/audit
+mkdir /database/Ecdsrt/cdsrt_admn01/admin/bct
+mkdir /database/Ecdsrt/cdsrt_admn01/admin/diag
+mkdir /database/Ecdsrt/cdsrt_admn01/admin/udump
+mkdir /database/Ecdsrt/cdsrt_arch01
+mkdir /database/Ecdsrt/cdsrt_arch01/arch
+mkdir /database/Ecdsrt/cdsrt_redo01
+mkdir /database/Ecdsrt/cdsrt_redo01/oractl
+mkdir /database/Ecdsrt/cdsrt_redo01/oralog
+mkdir /database/Ecdsrt/cdsrt_redo02
+mkdir /database/Ecdsrt/cdsrt_redo02/oractl
+mkdir /database/Ecdsrt/cdsrt_redo02/oralog
+
+
+df -h /rbkbak/*dsrt*
+Filesystem                                        Size  Used Avail Use% Mounted on
+10.144.3.44:/mnt/managedvolume/5bbdd7b3_channel0  1.5T   90G  1.3T   7% /rbkbak/ora_dsrt_arch_ch0
+10.144.3.41:/mnt/managedvolume/46305230_channel0  2.5T  914G  1.5T  39% /rbkbak/ora_dsrt_ch0
+
+. oraenv
+cdsrt
+/app/oracle/product/db/12c/1
+
+echo "db_name='cdsrt'" > $ORACLE_HOME/dbs/initcdsrt.ora
+
+ls -lrt /rbkbak/ora_dsrt_arch_ch0/control*
+-rw-r-----. 1 oracle dba 25100288 Sep 11 14:47 /rbkbak/ora_dsrt_arch_ch0/control_CDSRT_c-1466691986-20190911-1e
+
+export NLS_DATE_FORMAT='DD-MON-YYYY HH24MISS'
+
+rman target /
+STARTUP NOMOUNT PFILE='$ORACLE_HOME/dbs/initcdsrt.ora';
+RESTORE SPFILE TO '$ORACLE_HOME/dbs/spfilecdsrt.ora' FROM '/rbkbak/ora_dsrt_arch_ch0/control_CDSRT_c-1466691986-20190911-1e';
+STARTUP FORCE NOMOUNT;
+
+restore controlfile to '/database/Ecdsrt/cdsrt_redo01/oractl/control01.ctl' from '/rbkbak/ora_dsrt_arch_ch0/control_CDSRT_c-1466691986-20190911-1e';
+restore controlfile to '/database/Ecdsrt/cdsrt_redo02/oractl/control02.ctl' from '/rbkbak/ora_dsrt_arch_ch0/control_CDSRT_c-1466691986-20190911-1e';
+ALTER DATABASE MOUNT;
+
+LIST INCARNATION;
+DB Key  Inc Key DB Name  DB ID            STATUS  Reset SCN  Reset Time
+------- ------- -------- ---------------- --- ---------- ----------
+1       1       CDSRT    1466691986       PARENT  4477854    11-JUL-2017 172332
+2       2       CDSRT    1466691986       CURRENT 10984219813194 21-JUL-2019 034118
+
+CATALOG START WITH '/rbkbak/ora_dsrt_ch0/';
+CATALOG START WITH '/rbkbak/ora_dsrt_arch_ch0/';
+
+list BACKUP OF ARCHIVELOG ALL;
+
+
+cd /app/oracle/scripts
+vi rman_recover_dsrt_20190911.rman
+run
+{
+    SET UNTIL SEQUENCE 6028 THREAD 1;
+    restore database;
+    recover database;
+    ALTER DATABASE OPEN RESETLOGS;
+}
+
+nohup rman target / log=rman_recover_dsrt_20190911.log @rman_recover_dsrt_20190911.rman &
+tail -f rman_recover_dsrt_20190911.log
+
+Finished recover at 11-SEP-2019 181941
+
+. oraenv
+cdsrt
+/app/oracle/product/db/12c/1
+sqlplus / as sysdba
+select con_id, name, open_mode from v$containers;
+    CON_ID NAME                           OPEN_MODE
+---------- ------------------------------ ----------
+         1 CDB$ROOT                       READ WRITE
+         2 PDB$SEED                       READ ONLY
+         3 DSRT                           READ WRITE
+
+
+***************************************** Corruption test *****************************************
+
+sqlplus / as sysdba
+alter session set container=dsrt;
+set lines 150 pages 200
+
+create table ggtest.nologging_pre_count (
+ OWNER			VARCHAR2(128),
+ TABLE_NAME		VARCHAR2(128),
+ LOGGING		VARCHAR2(3),
+ CORRUPT		VARCHAR2(3),
+ RECORD_COUNT	NUMBER
+);
+
+create table ggtest.nologging_post_count as
+select * from ggtest.nologging_pre_count;
+
+set serveroutput on
+declare
+  cursor cf is
+    select tb.owner, tb.table_name, tb.logging
+	from DBA_TABLES tb
+	where tb.owner not in ('ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS')
+	and tb.logging='NO' and tb.TEMPORARY='N' and tb.dropped='NO'
+	union
+	select tp.table_owner, tp.table_name, tp.logging
+	from dba_tab_partitions tp
+	where tp.table_owner not in ('ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS')
+	and logging='NO'
+	and tp.table_name not in (select object_name from dba_recyclebin where upper(type)='TABLE PARTITION')
+	order by 1,2;
+  record_count	number;
+  sql_str		varchar2(2000);
+  rec			cf%rowtype;
+  corrupt_block	EXCEPTION;
+  PRAGMA		EXCEPTION_INIT(corrupt_block, -1578);
+begin
+  open cf;
+  loop
+    fetch cf
+      into rec;
+    exit when cf%notfound;
+    sql_str := 'select count(1) from "' || rec.owner || '"."' || rec.table_name || '"';
+    execute immediate sql_str into record_count;
+    dbms_output.put_line(rec.owner || ',' || rec.table_name || ',' || rec.logging || ',' || record_count);
+    insert into ggtest.nologging_pre_count
+	  (OWNER, TABLE_NAME, LOGGING, CORRUPT, RECORD_COUNT)
+    values
+      (rec.owner, rec.table_name, rec.logging, 'NO', record_count);
+	commit;
+  end loop;
+  close cf;
+EXCEPTION
+  WHEN corrupt_block THEN
+    dbms_output.put_line('!!CORRUPTION!! '||rec.owner || '.' || rec.table_name || ',' || rec.logging);
+	insert into ggtest.nologging_pre_count
+	  (OWNER, TABLE_NAME, LOGGING, CORRUPT)
+    values
+      (rec.owner, rec.table_name, rec.logging, 'YES');
+	commit;
+end;
+/
+CLIENT,CLIENT_CNSLD,NO,1
+CLIENT,CLIENT_RELAT,NO,0
+CLIENT,MATCH_PERSN_ADDR_SCORE,NO,6985742
+CLIENT,MATCH_PERSN_CLIENT_SCORE,NO,0
+CLIENT,MATCH_PERSN_DOB_SCORE,NO,6985742
+
+select * from ggtest.nologging_pre_count where corrupt='YES' order by 1,2;
+(no corruption)
+
+-- DB verify (running for hours)
+dbverify_alldbs.sh
+Thu Sep 12 10:09:44 EDT 2019
+Logging to /app/oracle/scripts/logs/dbverify_alldbs_LXORA12CINFS03.log
+WARNING: Found 2440 total pages with corruption
+ERROR: DBVERIFY failed to check 1 files. Check screen output.
+Thu Sep 12 12:16:45 EDT 2019
+
+
+-- How to identify all the Corrupted Objects in the Database with RMAN (Doc ID 472231.1)
+rman target /
+RMAN> backup validate check logical database;
+Recovery Manager: Release 12.1.0.2.0 - Production on Thu Sep 12 12:54:07 2019
+Thu Sep 12 13:52:50 EDT 2019
+
+sqlplus / as sysdba
+select count(*) from V$DATABASE_BLOCK_CORRUPTION;
+0
+
+
+-- recycled objects in results
+CURE_QUEUE,BIN$aZRDdlMJY93gUxStCwpC6w==$0,NO,0
+
+select * from dba_recyclebin where object_name='BIN$aZRDdlMJY93gUxStCwpC6w==$0';
+select owner, object_name, partition_name from dba_recyclebin 
+where owner='CURE_QUEUE' and upper(type)='TABLE PARTITION';
+
+col table_owner format a30
+col table_name format a30
+select tp.table_owner, tp.table_name, tp.logging
+from dba_tab_partitions tp
+where tp.table_owner not in ('ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS')
+and logging='NO'
+order by 1,2;
+
+select tp.table_owner, tp.table_name, tp.logging
+from dba_tab_partitions tp
+where tp.table_owner not in ('ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS')
+and logging='NO'
+and tp.table_name not in (select object_name from dba_recyclebin where upper(type)='TABLE PARTITION')
+order by 1,2;
+
+
+***************************************** Export Data & Metadata *****************************************
+
+-- lxoraodst02
+df -h | grep dsrt
+/dev/mapper/Ecdsrt-Ecdsrt01_lv                                   10G  9.3G  748M  93% /database/Ecdsrt/cdsrt01
+/dev/mapper/Ecdsrt-Ecdsrt_admn01_lv                              10G  5.7G  4.4G  57% /database/Ecdsrt/cdsrt_admn01
+/dev/mapper/Ecdsrt-Ecdsrt_arch01_lv                             127G   33M  127G   1% /database/Ecdsrt/cdsrt_arch01
+/dev/mapper/Ecdsrt-Ecdsrt_redo01_lv                             4.0G  1.6G  2.5G  39% /database/Ecdsrt/cdsrt_redo01
+/dev/mapper/Ecdsrt-Ecdsrt_redo02_lv                             4.0G  1.6G  2.5G  39% /database/Ecdsrt/cdsrt_redo02
+/database/Edsrt/dsrt01                                          1.2T  815G  384G  68% /database/Edsrt/dsrt01
+/dev/mapper/dsrt02vg-dsrt02_lv                                  733G  657G   39G  95% /database/Edsrt/dsrt02
+
+
+sqlplus / as sysdba
+alter session set container=dsrt;
+set lines 150 pages 200
+select * from dba_directories;
+SYS
+NOLOGMETA
+/database/Ecdsrt/cdsrt_admn01/metadata
+
+SYS
+DPUMP
+/database/Edsrt/dsrt01/dpump/
+
+-- CO 94332
+SET ECHO OFF
+SET DEFINE OFF
+SET ESCAPE OFF
+SET FEEDBACK ON
+SET HEAD ON
+SET SERVEROUTPUT ON SIZE 1000000
+SET TERMOUT ON
+SET TIMING OFF
+SET LINES 2500
+SET PAGES 0
+SET TRIMSPOOL ON
+SET LONG 10000
+SET NUMFORMAT 999999999999999990
+WHENEVER SQLERROR CONTINUE
+spool /database/Ecdsrt/cdsrt_admn01/metadata/dsrt_metadata_table_exp.par
+DECLARE
+  CURSOR c1 IS
+	select owner, table_name
+	from dba_tables
+	where owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+	and logging='NO' and TEMPORARY='N' and dropped='NO'
+	union  
+	select distinct table_owner, table_name
+	from dba_tab_partitions
+	where table_owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+	and logging='NO' and table_name not in (select object_name from dba_recyclebin where upper(type)='TABLE PARTITION');
+  vOwner	VARCHAR2(30);
+  vTable	VARCHAR2(30);
+  x			PLS_INTEGER;
+BEGIN
+  DBMS_OUTPUT.PUT_LINE('DIRECTORY=NOLOGMETA');
+  DBMS_OUTPUT.PUT_LINE('DUMPFILE=dsrt_metadata_table_exp.dmp');
+  DBMS_OUTPUT.PUT_LINE('LOGFILE=dsrt_metadata_table_exp.log');
+  DBMS_OUTPUT.PUT_LINE('PARALLEL=1');
+  DBMS_OUTPUT.PUT_LINE('METRICS=Y');
+  DBMS_OUTPUT.PUT_LINE('CONTENT=METADATA_ONLY');
+  DBMS_OUTPUT.PUT('TABLES=');
+  
+  x := 1;
+  OPEN c1;
+  LOOP
+    FETCH c1 INTO vOwner, vTable;
+	EXIT WHEN c1%NOTFOUND;
+	  IF x = 1 THEN
+        DBMS_OUTPUT.PUT(vOwner||'.'||vTable);
+      ELSE
+        DBMS_OUTPUT.PUT(','||vOwner||'.'||vTable);
+      END IF;
+	  x := x + 1;
+  END LOOP;
+  DBMS_OUTPUT.NEW_LINE;
+  CLOSE c1;
+END;
+/
+SPOOL OFF
+
+vi /database/Ecdsrt/cdsrt_admn01/metadata/dsrt_metadata_table_exp.par
+
+expdp \"system@dsrt\" PARFILE=/database/Ecdsrt/cdsrt_admn01/metadata/dsrt_metadata_table_exp.par
+Dump file set for SYSTEM.SYS_EXPORT_TABLE_01 is:
+  /database/Ecdsrt/cdsrt_admn01/metadata/dsrt_metadata_table_exp.dmp
+Job "SYSTEM"."SYS_EXPORT_TABLE_01" successfully completed at Thu Sep 12 09:45:14 2019 elapsed 0 00:01:04
+
+scp /database/Ecdsrt/cdsrt_admn01/metadata/dsrt_metadata_table_exp.dmp lxora12cinfs03:/database/Ecdsrt/cdsrt_admn01/metadata/
+
+
+***************************************** Import Metadata *****************************************
+
+vi /app/oracle/tns_admin/tnsnames.ora
+dsrt, dsrt.world =
+  (DESCRIPTION = (ADDRESS_LIST = (ADDRESS = (COMMUNITY = tcp.world)
+  (PROTOCOL = TCP)(HOST = lxora12cinfs03.conseco.ad)(PORT = 1521)))
+  (CONNECT_DATA = (SERVICE_NAME = dsrt)))
+  
+  
+impdp \"system@dsrt\" DIRECTORY=NOLOGMETA DUMPFILE=dsrt_metadata_table_exp.dmp LOGFILE=dsrt_metadata_table_imp.log TABLE_EXISTS_ACTION=REPLACE CONTENT=ALL
+Job "SYSTEM"."SYS_IMPORT_FULL_01" successfully completed at Thu Sep 12 14:42:36 2019 elapsed 0 00:01:44
+
+
+***** DataPump Import (IMPDP) Reports ORA-14063 When Loading Constraints (Doc ID 2446610.1)
+SOLUTION: After impdp, rebuild index on target database
+
+sqlplus / as sysdba
+set lines 150 pages 200
+set serveroutput on
+alter session set container=dsrt;
+
+-- index health
+col owner format a30
+col index_name format a30
+col tablespace_name format a30
+select owner, index_name, tablespace_name, status
+from dba_indexes
+where owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+and logging='NO' and TEMPORARY='N' and dropped='NO' and status!='VALID'
+order by 1,2;
+no rows selected
+
+-- rebuild indexes
+--set pages 0
+--spool /database/cdsrt_admn01/metadata/rebuild_indexes.sql
+--select 'ALTER INDEX '||owner||'.'||index_name||' REBUILD;'
+--from dba_indexes
+--where owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+--and logging='NO' and TEMPORARY='N' and dropped='NO' and status!='VALID';
+--spool off
+--@/database/cdsrt_admn01/metadata/rebuild_indexes.sql
+
+-- partitioned indexes
+col index_owner format a30
+select index_owner, index_name, tablespace_name, status
+from dba_ind_partitions
+where index_owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+and logging='NO' and status!='VALID'
+order by 1,2;
+no rows selected
+
+-- constraints
+col table_name format a30
+col constraint_name format a30
+select tab.owner, tab.table_name, dc.constraint_name, dc.constraint_type, dc.status
+from dba_constraints dc join dba_tables tab
+  on dc.owner = tab.owner and dc.table_name=tab.table_name
+where tab.logging='NO' and tab.TEMPORARY='N' and tab.dropped='NO' and dc.status!='ENABLED'
+and tab.owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+order by 1,2,3;
+OWNER                          TABLE_NAME                     CONSTRAINT_NAME                C STATUS
+------------------------------ ------------------------------ ------------------------------ - --------
+CURE_CORE                      EID_OBJ                        EID_OBJ_NN01                   C DISABLED
+CURE_CORE                      EID_OBJ_ATTR                   EID_OBJ_ATTR_NN01              C DISABLED
+CURE_CORE                      EID_OBJ_ATTR                   EID_OBJ_ATTR_NN02              C DISABLED
+(same as live DB)
+
+
+***************************************** Post-import row counts *****************************************
+
+sqlplus / as sysdba
+alter session set container=dsrt;
+set lines 150 pages 200
+
+truncate table ggtest.nologging_post_count;
+
+set serveroutput on
+declare
+  cursor cf is
+    select tb.owner, tb.table_name, tb.logging
+	from DBA_TABLES tb
+	where tb.owner not in ('ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS')
+	and tb.logging='NO' and tb.TEMPORARY='N' and tb.dropped='NO'
+	union
+	select tp.table_owner, tp.table_name, tp.logging
+	from dba_tab_partitions tp
+	where tp.table_owner not in ('ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS')
+	and logging='NO'
+	and tp.table_name not in (select object_name from dba_recyclebin where upper(type)='TABLE PARTITION')
+	order by 1,2;
+  record_count	number;
+  sql_str		varchar2(2000);
+  rec			cf%rowtype;
+  corrupt_block	EXCEPTION;
+  PRAGMA		EXCEPTION_INIT(corrupt_block, -1578);
+begin
+  open cf;
+  loop
+    fetch cf
+      into rec;
+    exit when cf%notfound;
+    sql_str := 'select count(1) from "' || rec.owner || '"."' || rec.table_name || '"';
+    execute immediate sql_str into record_count;
+    dbms_output.put_line(rec.owner || ',' || rec.table_name || ',' || rec.logging || ',' || record_count);
+    insert into ggtest.nologging_post_count
+	  (OWNER, TABLE_NAME, LOGGING, CORRUPT, RECORD_COUNT)
+    values
+      (rec.owner, rec.table_name, rec.logging, 'NO', record_count);
+	commit;
+  end loop;
+  close cf;
+EXCEPTION
+  WHEN corrupt_block THEN
+    dbms_output.put_line('!!CORRUPTION!! '||rec.owner || '.' || rec.table_name || ',' || rec.logging);
+	insert into ggtest.nologging_post_count
+	  (OWNER, TABLE_NAME, LOGGING, CORRUPT)
+    values
+      (rec.owner, rec.table_name, rec.logging, 'YES');
+	commit;
+end;
+/
+
+select * from ggtest.nologging_post_count where record_count!=0;
+OWNER                          TABLE_NAME                     LOG COR RECORD_COUNT
+------------------------------ ------------------------------ --- --- ------------
+CURE_QUEUE                     PEL_ERL_PRD                    NO  NO         20664
+(not in par export file)
+
+-- logging='NO' and tb.TEMPORARY='N' and tb.dropped='NO'
+select owner, table_name, tablespace_name, logging, TEMPORARY, dropped
+from dba_tables where owner='CURE_QUEUE' and table_name='PEL_ERL_PRD';
+OWNER                          TABLE_NAME                     TABLESPACE_NAME                LOG T DRO
+------------------------------ ------------------------------ ------------------------------ --- - ---
+CURE_QUEUE                     PEL_ERL_PRD                                                       N NO
+
+-- logging='NO' and table_name not in (select object_name from dba_recyclebin where upper(type)='TABLE PARTITION')
+select table_owner, table_name, tablespace_name, logging
+from dba_tab_partitions where table_owner='CURE_QUEUE' and table_name='PEL_ERL_PRD';
+TABLE_OWNER                    TABLE_NAME                     TABLESPACE_NAME                LOGGING
+------------------------------ ------------------------------ ------------------------------ -------
+CURE_QUEUE                     PEL_ERL_PRD                    CURE_TBLSP_DATA                NO
+CURE_QUEUE                     PEL_ERL_PRD                    CURE_TBLSP_DATA                NO
+CURE_QUEUE                     PEL_ERL_PRD                    CURE_TBLSP_DATA                NO
+
+
+-- LXORAODST02
+alter session set container=dsrt;
+set lines 150 pages 200
+col table_owner format a30
+col table_name format a30
+select distinct table_owner, table_name, logging
+from dba_tab_partitions
+where table_owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+and logging='NO' and table_name not in (select object_name from dba_recyclebin where upper(type)='TABLE PARTITION')
+order by 1,2;
+CURE_QUEUE                     PEL_EPS_POC                    NO
+CURE_QUEUE                     PEL_ERL_CVG                    NO
+CURE_QUEUE                     PEL_EZAPP_PARTY                NO
+
+select table_owner, table_name, tablespace_name, logging
+from dba_tab_partitions where table_owner='CURE_QUEUE' and table_name='PEL_ERL_PRD';
+TABLE_OWNER                    TABLE_NAME                     TABLESPACE_NAME                LOGGING
+------------------------------ ------------------------------ ------------------------------ -------
+CURE_QUEUE                     PEL_ERL_PRD                    CURE_TBLSP_DATA                YES
+CURE_QUEUE                     PEL_ERL_PRD                    CURE_TBLSP_DATA                YES
+CURE_QUEUE                     PEL_ERL_PRD                    CURE_TBLSP_DATA                YES
+
+
+***************************************** Drop DB *****************************************
+
+-- LXORA12CINFS03
+. oraenv
+cdsrt
+/app/oracle/product/db/12c/1
+
+sqlplus / as sysdba
+select name, dbid, open_mode from V$CONTAINERS order by con_id;
+NAME                                 DBID OPEN_MODE
+------------------------------ ---------- ----------
+CDB$ROOT                       1466691986 READ WRITE
+PDB$SEED                       3434606649 READ ONLY
+DSRT                           2502638784 READ WRITE
+
+alter pluggable database all close;
+DROP PLUGGABLE DATABASE dsrt INCLUDING DATAFILES;
+
+shutdown immediate;
+startup restrict mount;
+DROP DATABASE;
+
+rm -R /database/Ecdsrt/cdsrt01
+rm -R /database/Ecdsrt/cdsrt_admn01
+rm -R /database/Ecdsrt/cdsrt_arch01
+rm -R /database/Ecdsrt/cdsrt_redo01
+rm -R /database/Ecdsrt/cdsrt_redo02
+rm -R /database/Edsrt/dsrt01
+rm -R /database/Edsrt/dsrt02
+rm -R /database/Ecdsrt
+rm -R /database/Edsrt
+
+sudo su -
+umount /rbkbak/ora_dsrt_ch0
+umount /rbkbak/ora_dsrt_arch_ch0
+
+vi /etc/fstab

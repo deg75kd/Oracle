@@ -1,0 +1,47 @@
+-- Requirements:
+	-- Using image copy of DB (should work for backups too)
+	-- Using archivelog files and backups of controlfiles
+
+-- connect to rman
+rman target sys
+
+-- put DB in nomount mode
+STARTUP NOMOUNT;
+
+-- check which channels are configured
+SHOW ALL;
+
+-- set device type if not correct
+CONFIGURE DEFAULT DEVICE TYPE TO DISK;
+
+-- restore controlfile
+-- find location of backup controlfiles and identify the most recent
+-- find DBID from 1st number of controlfile backup filename
+SET DBID=3533962851;
+RESTORE CONTROLFILE FROM 'U:\FLASH_RECOVER_ACTCUT\CONTROLFILE\C-3533962851-20110318-01';
+
+-- mount DB
+ALTER DATABASE MOUNT;
+
+-- log into sqlplus
+-- find sequence and thread of most recent archivelog
+-- find archivelog naming format
+-- %S - log seq num, zero filled
+-- %R - resetlogs ID, ensures unique names
+-- %T - thread num
+SHOW PARAMETER LOG;
+
+-- restore and recover up to most recent archivelog file
+-- add 1 to highest sequence number
+run
+{
+	SET UNTIL SEQUENCE 36 THREAD 1;
+	restore database;
+	recover database;
+}
+
+-- open DB
+ALTER DATABASE OPEN RESETLOGS;
+
+
+

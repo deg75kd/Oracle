@@ -1,0 +1,583 @@
+###########################
+# image copy restore test #
+# lxora12cinfs02          #
+# 8/19/2019               #
+###########################
+
+**************************************************** LXORABPAD01 ****************************************************
+
+10.144.3.37:/mnt/managedvolume/c2555c18_channel0 /rbkbak/ora_sswtdmd_arch_ch0 nfs rw,bg,hard,nointr,rsize=32768,wsize=32768,tcp,actimeo=0,vers=3,timeo=600 0 0
+10.144.3.57:/mnt/managedvolume/af86e628_channel0 /rbkbak/ora_sswtdmd_ch0 nfs rw,bg,hard,nointr,rsize=32768,wsize=32768,tcp,actimeo=0,vers=3,timeo=600 0 0
+
+> df -h /database/*sswtdmd*
+Filesystem                                Size  Used Avail Use% Mounted on
+/dev/mapper/sswtdmdvg-csswtdmd01_lv       9.8G  6.5G  2.8G  70% /database/csswtdmd01
+/dev/mapper/sswtdmdvg-csswtdmd_admn01_lv  4.8G   54M  4.5G   2% /database/csswtdmd_admn01
+/dev/mapper/sswtdmdvg-csswtdmd_arch01_lv  9.8G   37M  9.2G   1% /database/csswtdmd_arch01
+/dev/mapper/sswtdmdvg-csswtdmd_redo01_lv  2.0G  1.6G  271M  86% /database/csswtdmd_redo01
+/dev/mapper/sswtdmdvg-csswtdmd_redo02_lv  2.0G  1.6G  271M  86% /database/csswtdmd_redo02
+/dev/mapper/sswtdmdvg-sswtdmd01_lv         20G  7.3G   12G  39% /database/sswtdmd01
+
+> ll $ORACLE_HOME/dbs/*csswtdmd*
+lrwxrwxrwx. 1 oracle dba       54 Apr  6  2017 /app/oracle/product/db/12c/1/dbs/initcsswtdmd.ora -> /database/csswtdmd_admn01/admin/pfile/initcsswtdmd.ora
+lrwxrwxrwx. 1 oracle dba       51 Apr  6  2017 /app/oracle/product/db/12c/1/dbs/orapwcsswtdmd -> /database/csswtdmd_admn01/admin/pfile/orapwcsswtdmd
+lrwxrwxrwx. 1 oracle dba       56 Apr  6  2017 /app/oracle/product/db/12c/1/dbs/spfilecsswtdmd.ora -> /database/csswtdmd_admn01/admin/pfile/spfilecsswtdmd.ora
+
+
+**************************************************** LXORA12CINFS02 ****************************************************
+
+> df -h /database2
+Filesystem                          Size  Used Avail Use% Mounted on
+/dev/mapper/databasevg-database_lv  1.7T  1.4T  281G  83% /database2
+
+mkdir /database2/sswtdmd01
+mkdir /database2/sswtdmd01/oradata
+mkdir /database2/csswtdmd01
+mkdir /database2/csswtdmd01/oradata
+mkdir /database2/csswtdmd01/oradata/pdbseed
+mkdir /database2/csswtdmd_admn01
+mkdir /database2/csswtdmd_admn01/admin
+mkdir /database2/csswtdmd_admn01/admin/adump
+mkdir /database2/csswtdmd_admn01/admin/audit
+mkdir /database2/csswtdmd_admn01/admin/bct
+mkdir /database2/csswtdmd_admn01/admin/diag
+mkdir /database2/csswtdmd_admn01/admin/utldump
+mkdir /database2/csswtdmd_arch01
+mkdir /database2/csswtdmd_arch01/arch
+mkdir /database2/csswtdmd_redo01
+mkdir /database2/csswtdmd_redo01/oractl
+mkdir /database2/csswtdmd_redo01/oralog
+mkdir /database2/csswtdmd_redo02
+mkdir /database2/csswtdmd_redo02/oractl
+mkdir /database2/csswtdmd_redo02/oralog
+
+touch /database2/sswtdmd01/oradata/test
+
+ln -s /database2/sswtdmd01 /database
+ln -s /database2/csswtdmd01 /database
+ln -s /database2/csswtdmd_admn01 /database
+ln -s /database2/csswtdmd_arch01 /database
+ln -s /database2/csswtdmd_redo01 /database
+ln -s /database2/csswtdmd_redo02 /database
+
+scp lxorabpad01:/database/csswtdmd_admn01/admin/pfile/spfilecsswtdmd.ora /app/oracle/product/db/12c/1/dbs
+
+sudo su -
+vi /etc/fstab
+
+mkdir /rbkbak/ora_sswtdmd_arch_ch0
+mount /rbkbak/ora_sswtdmd_arch_ch0
+mount.nfs: backgrounding "10.144.3.37:/mnt/managedvolume/c2555c18_channel0"
+mount.nfs: mount options: "rw,bg,hard,nointr,rsize=32768,wsize=32768,tcp,actimeo=0,vers=3,timeo=600"
+
+mkdir /rbkbak/ora_sswtdmd_ch0
+mount /rbkbak/ora_sswtdmd_ch0
+mount.nfs: backgrounding "10.144.3.57:/mnt/managedvolume/af86e628_channel0"
+mount.nfs: mount options: "rw,bg,hard,nointr,rsize=32768,wsize=32768,tcp,actimeo=0,vers=3,timeo=600"
+
+> ls -lrt /rbkbak/ora_sswtdmd_arch_ch0
+-rw-r-----. 1 oracle dba    5478400 Aug 20 07:06 arch-CSSWTDMD_2630075607_13914_1_1016780776
+-rw-r-----. 1 oracle dba   21528576 Aug 20 07:06 control_CSSWTDMD_c-2630075607-20190820-02
+
+> ls -lrt /rbkbak/ora_sswtdmd_ch0
+
+cd /app/oracle/scripts
+vi csswtdmd_copy_backup.sh
+
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SYSTEM_FNO-1_7st3f27e /database/csswtdmd01/oradata/system01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SYSTEM_FNO-2_1jt28vtl /database/csswtdmd01/oradata/pdbseed/system01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SYSAUX_FNO-3_7pt3f258 /database/csswtdmd01/oradata/sysaux01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SYSAUX_FNO-4_1it28vte /database/csswtdmd01/oradata/pdbseed/sysaux01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-UNDO_FNO-5_82t3f29t /database/csswtdmd01/oradata/undo.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-USERS_FNO-6_87t3f2ak /database/csswtdmd01/oradata/users01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-USERS_FNO-7_1ut28vv6 /database/csswtdmd01/oradata/pdbseed/users01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-TOOLS_FNO-8_81t3f29q /database/csswtdmd01/oradata/tools01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-TOOLS_FNO-12_1kt28vts /database/csswtdmd01/oradata/pdbseed/tools01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-UNDO_FNO-13_83t3f2a0 /database/sswtdmd01/oradata/undo01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SYSTEM_FNO-14_7vt3f28s /database/sswtdmd01/oradata/system01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SYSAUX_FNO-15_7tt3f27t /database/sswtdmd01/oradata/sysaux01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-USERS_FNO-16_88t3f2ao /database/sswtdmd01/oradata/users01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-TOOLS_FNO-17_80t3f29b /database/sswtdmd01/oradata/tools01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-GGS_FNO-18_84t3f2a3 /database/sswtdmd01/oradata/ggs01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-PRVDRLR6DB_DATA_FNO-19_7rt3f26l /database/sswtdmd01/oradata/prvdrlr6db_data01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SSWDB_DATA_FNO-20_7ut3f28d /database/sswtdmd01/oradata/sswdb_data01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SSWLRDB_DATA_FNO-21_85t3f2aa /database/sswtdmd01/oradata/sswlrdb_data01.dbf
+cp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-LOGON_AUDIT_DATA_FNO-22_86t3f2ad /database/sswtdmd01/oradata/logon_audit_data01.dbf
+
+ll /database/csswtdmd01/oradata
+ll /database/csswtdmd01/oradata/pdbseed
+ll /database/sswtdmd01/oradata
+
+export NLS_DATE_FORMAT="DD-MON-YYYY HH24:MI:SS"
+. oraenv
+csswtdmd
+/app/oracle/product/db/12c/1
+
+rman target /
+STARTUP NOMOUNT;
+restore controlfile to '/database/csswtdmd_redo01/oractl/control01.ctl' from '/rbkbak/ora_sswtdmd_arch_ch0/control_CSSWTDMD_c-2630075607-20190820-02';
+restore controlfile to '/database/csswtdmd_redo02/oractl/control02.ctl' from '/rbkbak/ora_sswtdmd_arch_ch0/control_CSSWTDMD_c-2630075607-20190820-02';
+
+ALTER DATABASE MOUNT;
+ALTER DATABASE OPEN;
+ORA-01589: must use RESETLOGS or NORESETLOGS option for database open
+
+ALTER DATABASE OPEN RESETLOGS;
+ORA-01110: data file 1: '/database/csswtdmd01/oradata/system01.dbf'
+
+list backup of archivelog all;
+
+RECOVER DATABASE UNTIL TIME "TO_DATE('15-AUG-2019 17:34','DD-MON-YYYY HH24:MI')";
+
+channel ORA_DISK_1: piece handle=/rbkbak/ora_sswtdmd_ch0/g4u99kmh_1_1 tag=SSWTDMD_INCMRG
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_2: piece handle=/rbkbak/ora_sswtdmd_ch0/g5u99kmo_1_1 tag=SSWTDMD_INCMRG
+channel ORA_DISK_2: restored backup piece 1
+
+channel ORA_DISK_1: piece handle=/rbkbak/ora_sswtdmd_arch_ch0/arch-CSSWTDMD_2630075607_13832_1_1016424426 tag=TAG20190816T040705
+channel ORA_DISK_1: restored backup piece 1
+channel ORA_DISK_1: restore complete, elapsed time: 00:00:03
+
+ALTER DATABASE OPEN RESETLOGS;
+Statement processed
+
+
+sqlplus / as sysdba
+select con_id, name, open_mode from v$containers;
+    CON_ID NAME                           OPEN_MODE
+---------- ------------------------------ ----------
+         1 CDB$ROOT                       READ WRITE
+         2 PDB$SEED                       READ ONLY
+         3 SSWTDMD                        READ WRITE
+		 
+select file_name from dba_temp_files;
+FILE_NAME
+--------------------------------------------------------------------------------
+/database/csswtdmd01/oradata/temp01.dbf
+/database/sswtdmd01/oradata/temp02.dbf
+
+
+**************************************************** Backup File Details ****************************************************
+
+set lines 150 pages 200
+select table_name from dict where table_name like '%RMAN%' order by 1;
+V$RMAN_BACKUP_JOB_DETAILS
+V$RMAN_BACKUP_SUBJOB_DETAILS
+V$RMAN_BACKUP_TYPE
+V$RMAN_COMPRESSION_ALGORITHM
+V$RMAN_CONFIGURATION
+V$RMAN_ENCRYPTION_ALGORITHMS
+V$RMAN_OUTPUT
+V$RMAN_STATUS
+
+select table_name from dict where table_name like '%BACKUP%' order by 1;
+V$BACKUP
+V$BACKUP_ARCHIVELOG_DETAILS
+V$BACKUP_ARCHIVELOG_SUMMARY
+V$BACKUP_ASYNC_IO
+V$BACKUP_CONTROLFILE_DETAILS
+V$BACKUP_CONTROLFILE_SUMMARY
+V$BACKUP_COPY_DETAILS
+V$BACKUP_COPY_SUMMARY
+V$BACKUP_CORRUPTION
+V$BACKUP_DATAFILE
+V$BACKUP_DATAFILE_DETAILS
+V$BACKUP_DATAFILE_SUMMARY
+V$BACKUP_DEVICE
+V$BACKUP_FILES
+V$BACKUP_NONLOGGED
+V$BACKUP_PIECE
+V$BACKUP_PIECE_DETAILS
+V$BACKUP_REDOLOG
+V$BACKUP_SET
+V$BACKUP_SET_DETAILS
+V$BACKUP_SET_SUMMARY
+V$BACKUP_SPFILE
+V$BACKUP_SPFILE_DETAILS
+V$BACKUP_SPFILE_SUMMARY
+V$BACKUP_SYNC_IO
+
+select output from V$RMAN_OUTPUT where output like '%/database/csswtdmd01/oradata/pdbseed%';
+
+select output from V$RMAN_OUTPUT where output like '%/rbkbak/ora_sswtdmd_ch0/data%';
+
+
+select filename from v$backup_async_io where filename like '%/database/csswtdmd01/oradata/pdbseed%';
+
+select DF_FILE#, FNAME
+from V$BACKUP_FILES
+where BACKUP_TYPE='COPY' and FILE_TYPE='DATAFILE'
+order by 1,2;
+
+select file#, name
+from v$datafile
+order by 1,2;
+
+col "F#" format 990
+col "BackupFile" format a80
+col "Datafile" format a60
+select df.file# "F#", bu.FNAME "BackupFile", df.name "Datafile"
+from V$BACKUP_FILES bu, v$datafile df
+where bu.DF_FILE#=df.file#
+and bu.BACKUP_TYPE='COPY' and bu.FILE_TYPE='DATAFILE'
+order by 1,2;
+  F# BackupFile                                                                       Datafile
+---- -------------------------------------------------------------------------------- ------------------------------------------------------------
+   1 /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SYSTEM_FNO-1_7st3f27e    /database/csswtdmd01/oradata/system01.dbf
+   2 /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SYSTEM_FNO-2_1jt28vtl    /database/csswtdmd01/oradata/pdbseed/system01.dbf
+   3 /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SYSAUX_FNO-3_7pt3f258    /database/csswtdmd01/oradata/sysaux01.dbf
+   4 /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SYSAUX_FNO-4_1it28vte    /database/csswtdmd01/oradata/pdbseed/sysaux01.dbf
+...
+
+col "Copy Command" format a145
+select 'scp '||bu.FNAME||' '||df.name "Copy Command"
+from V$BACKUP_FILES bu, v$datafile df
+where bu.DF_FILE#=df.file#
+and bu.BACKUP_TYPE='COPY' and bu.FILE_TYPE='DATAFILE'
+order by df.file#;
+Copy Command
+-------------------------------------------------------------------------------------------------------------------------------------------------
+scp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SYSTEM_FNO-1_7st3f27e /database/csswtdmd01/oradata/system01.dbf
+scp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SYSTEM_FNO-2_1jt28vtl /database/csswtdmd01/oradata/pdbseed/system01.dbf
+scp /rbkbak/ora_sswtdmd_ch0/data_D-CSSWTDMD_I-2630075607_TS-SYSAUX_FNO-3_7pt3f258 /database/csswtdmd01/oradata/sysaux01.dbf
+
+
+**************************************************** Timed Test 1 ****************************************************
+
+-- drop DB
+select name, dbid, open_mode from V$CONTAINERS order by con_id;
+alter pluggable database all close;
+DROP PLUGGABLE DATABASE SSWTDMD INCLUDING DATAFILES;
+
+shutdown immediate;
+startup restrict mount;
+DROP DATABASE;
+
+ll /database/csswtdmd01/oradata/pdbseed
+total 0
+ll /database/csswtdmd01/oradata
+total 0
+ll /database/sswtdmd01/oradata
+total 0
+
+
+-- recover using copy
+cd /app/oracle/scripts
+chmod 744 sswtdmd_restore_copy.sh
+sswtdmd_restore_copy.sh
+
+ORA-00205: error in identifying control file, check alert log for more info
+
+ll /database/csswtdmd_redo01/oractl/control01.ctl
+ll /database/csswtdmd_redo02/oractl/control02.ctl
+
+select con_id, name, open_mode from v$containers;
+select open_mode from v$database;
+
+rm /database/csswtdmd01/oradata/pdbseed/*.dbf
+rm /database/csswtdmd01/oradata/*.dbf
+rm /database/sswtdmd01/oradata/*.dbf
+
+
+sswtdmd_restore_copy.sh
+Wed Aug 21 10:24:15 EDT 2019
+Starting recover at 21-AUG-2019 10:26:25	-> 2:10 minutes
+    CON_ID NAME                           OPEN_MODE
+---------- ------------------------------ ----------
+         1 CDB$ROOT                       READ WRITE
+         2 PDB$SEED                       READ ONLY
+         3 SSWTDMD                        READ WRITE
+Wed Aug 21 10:28:33 EDT 2019
+Total Time = 4:18 minutes
+
+
+-- drop DB
+select name, dbid, open_mode from V$CONTAINERS order by con_id;
+alter pluggable database all close;
+DROP PLUGGABLE DATABASE SSWTDMD INCLUDING DATAFILES;
+
+shutdown immediate;
+startup restrict mount;
+DROP DATABASE;
+
+ll /database/csswtdmd01/oradata/pdbseed
+total 0
+ll /database/csswtdmd01/oradata
+total 0
+ll /database/sswtdmd01/oradata
+total 0
+
+-- recovery normally
+chmod 744 sswtdmd_restore_normal.sh
+
+sswtdmd_restore_normal.sh
+Wed Aug 21 10:45:04 EDT 2019
+Starting recover at 21-AUG-2019 10:47:08	-> 2:04 minutes
+    CON_ID NAME                           OPEN_MODE
+---------- ------------------------------ ----------
+         1 CDB$ROOT                       READ WRITE
+         2 PDB$SEED                       READ ONLY
+         3 SSWTDMD                        READ WRITE
+Wed Aug 21 10:48:20 EDT 2019
+Total Time = 3:16 minutes
+
+
+-- drop DB
+select name, dbid, open_mode from V$CONTAINERS order by con_id;
+alter pluggable database all close;
+DROP PLUGGABLE DATABASE SSWTDMD INCLUDING DATAFILES;
+
+shutdown immediate;
+startup restrict mount;
+DROP DATABASE;
+
+rm -R /database/csswtdmd01
+rm -R /database2/csswtdmd01
+rm -R /database/csswtdmd_admn01
+rm -R /database2/csswtdmd_admn01
+rm -R /database/csswtdmd_arch01
+rm -R /database2/csswtdmd_arch01
+rm -R /database/csswtdmd_redo01
+rm -R /database2/csswtdmd_redo01
+rm -R /database/csswtdmd_redo02
+rm -R /database2/csswtdmd_redo02
+rm -R /database/sswtdmd01
+rm -R /database2/sswtdmd01
+
+
+
+#############
+# test 2    #
+# 8/22/2019 #
+#############
+
+**************************************************** LXORAFIND02 ****************************************************
+
+-- cigtdmd (301 GB)
+> cat /etc/fstab | grep cigtdmd
+10.144.3.40:/mnt/managedvolume/4453cbc2_channel0 /rbkbak/ora_cigtdmd_arch_ch0 nfs rw,bg,hard,nointr,rsize=32768,wsize=32768,tcp,actimeo=0,vers=3,timeo=600 0 0
+10.144.3.44:/mnt/managedvolume/fb2d7125_channel0 /rbkbak/ora_cigtdmd_ch0 nfs rw,bg,hard,nointr,rsize=32768,wsize=32768,tcp,actimeo=0,vers=3,timeo=600 0 0
+
+> df -h /database/*cigtdmd*
+Filesystem                                Size  Used Avail Use% Mounted on
+/dev/mapper/cigtdmdvg-ccigtdmd01_lv       9.8G  8.5G  739M  93% /database/ccigtdmd01
+/dev/mapper/cigtdmdvg-ccigtdmd_admn01_lv  3.9G   81M  3.6G   3% /database/ccigtdmd_admn01
+/dev/mapper/cigtdmdvg-ccigtdmd_arch01_lv  9.8G   37M  9.2G   1% /database/ccigtdmd_arch01
+/dev/mapper/cigtdmdvg-ccigtdmd_redo01_lv  2.0G  1.6G  268M  86% /database/ccigtdmd_redo01
+/dev/mapper/cigtdmdvg-ccigtdmd_redo02_lv  2.0G  1.6G  268M  86% /database/ccigtdmd_redo02
+/dev/mapper/cigtdmdvg-cigtdmd01_lv        542G  335G  182G  65% /database/cigtdmd01
+
+
+set lines 200 pages 0
+col "Copy Command" format a200
+select 'cp '||bu.FNAME||' '||df.name "Copy Command"
+from V$BACKUP_FILES bu, v$datafile df
+where bu.DF_FILE#=df.file#
+and bu.BACKUP_TYPE='COPY' and bu.FILE_TYPE='DATAFILE'
+order by df.file#;
+
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-SYSTEM_FNO-1_9ot28r8g /database/ccigtdmd01/oradata/system01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-SYSAUX_FNO-3_9ht28r1o /database/ccigtdmd01/oradata/sysaux01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-UNDO_FNO-4_9mt28r77 /database/ccigtdmd01/oradata/undo.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-USERS_FNO-6_ant28rcf /database/ccigtdmd01/oradata/users01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-TOOLS_FNO-8_a2t28raf /database/ccigtdmd01/oradata/tools01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-UNDO_FNO-12_95t28q2v /database/cigtdmd01/oradata/undo01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-SYSTEM_FNO-13_9rt28r9l /database/cigtdmd01/oradata/system01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-SYSAUX_FNO-14_9lt28r6e /database/cigtdmd01/oradata/sysaux01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-USERS_FNO-15_93t28pni /database/cigtdmd01/oradata/users01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-TOOLS_FNO-16_a4t28ral /database/cigtdmd01/oradata/tools01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-DUM_DATA_FNO-17_a5t28rao /database/cigtdmd01/oradata/dum_data01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-EODS_DATA_FNO-18_9bt28qlr /database/cigtdmd01/oradata/eods_data_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-EODS_IDX_FNO-19_9ft28quk /database/cigtdmd01/oradata/eods_idx_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-GGS_FNO-20_a6t28ras /database/cigtdmd01/oradata/ggs01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-GPS_OL_DATA_FNO-21_a7t28rav /database/cigtdmd01/oradata/gps_ol_data_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-GPS_OL_IDX_FNO-22_a8t28rb2 /database/cigtdmd01/oradata/gps_ol_idx_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-LIFERAY_OL_DATA_FNO-23_9jt28r48 /database/cigtdmd01/oradata/LIFERAY_OL_DATA_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-LIFERAY_OL_IDX_FNO-24_9pt28r8v /database/cigtdmd01/oradata/LIFERAY_OL_IDX_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-LOGON_AUDIT_DATA_FNO-25_a9t28rb5 /database/cigtdmd01/oradata/LOGON_AUDIT_DATA_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-ONLINE_DATA_HUGE_FNO-26_96t28q78 /database/cigtdmd01/oradata/online_data_huge_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-ONLINE_DATA_HUGE_001_FNO-27_9tt28r9v /database/cigtdmd01/oradata/online_data_huge_001_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-ONLINE_DATA_HUGE_030_FNO-28_9ut28ra2 /database/cigtdmd01/oradata/online_data_huge_030_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-ONLINE_DATA_LARGE_FNO-29_99t28qh5 /database/cigtdmd01/oradata/online_data_large_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-ONLINE_DATA_MEDIUM_FNO-30_9dt28qq7 /database/cigtdmd01/oradata/online_data_medium_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-ONLINE_DATA_SMALL_FNO-31_aat28rb8 /database/cigtdmd01/oradata/online_data_small_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-ONLINE_ID_FNO-32_abt28rbb /database/cigtdmd01/oradata/online_id_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-ONLINE_IDX_HUGE_FNO-33_97t28qbg /database/cigtdmd01/oradata/online_idx_huge_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-ONLINE_IDX_HUGE_001_FNO-34_9vt28ra6 /database/cigtdmd01/oradata/online_idx_huge_001_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-ONLINE_IDX_HUGE_030_FNO-35_a0t28ra9 /database/cigtdmd01/oradata/online_idx_huge_030_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-ONLINE_IDX_LARGE_FNO-36_9nt28r81 /database/cigtdmd01/oradata/online_idx_large_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-ONLINE_IDX_MEDIUM_FNO-37_9gt28r0b /database/cigtdmd01/oradata/online_idx_medium_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-ONLINE_IDX_SMALL_FNO-38_act28rbe /database/cigtdmd01/oradata/online_idx_small_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-PRVCY_KEY_OL_DATA_FNO-39_adt28rbh /database/cigtdmd01/oradata/PRVCY_KEY_OL_DATA01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-PRVCY_KEY_OL_IDX_FNO-40_aet28rbl /database/cigtdmd01/oradata/PRVCY_KEY_OL_IDX01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-STG_DATA_HUGE_FNO-41_91t28p9f /database/cigtdmd01/oradata/stg_data_huge_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-STG_DATA_LARGE_FNO-42_9it28r35 /database/cigtdmd01/oradata/stg_data_large_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-STG_DATA_MEDIUM_FNO-43_9kt28r5b /database/cigtdmd01/oradata/stg_data_medium_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-STG_DATA_SMALL_FNO-44_aft28rbo /database/cigtdmd01/oradata/stg_data_small_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-STG_IDX_HUGE_FNO-45_a1t28rac /database/cigtdmd01/oradata/stg_idx_huge_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-STG_IDX_MEDIUM_FNO-46_agt28rbr /database/cigtdmd01/oradata/stg_idx_medium_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-XDB_FNO-47_aht28rbu /database/cigtdmd01/oradata/xdb1.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-EODS_DATA_FNO-48_9ct28qo6 /database/cigtdmd01/oradata/eods_data_02.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-EODS_DATA_FNO-49_9at28qjg /database/cigtdmd01/oradata/eods_data_03.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-EODS_DATA_FNO-50_9et28qs8 /database/cigtdmd01/oradata/eods_data_04.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-EODS_DATA_FNO-51_94t28pte /database/cigtdmd01/oradata/eods_data_05.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-EODS_DATA_FNO-52_8ut28opq /database/cigtdmd01/oradata/eods_data_06.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-EODS_IDX_FNO-53_98t28qe6 /database/cigtdmd01/oradata/eods_idx_02.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-STG_DATA_HUGE_FNO-54_92t28pgg /database/cigtdmd01/oradata/stg_data_huge_02.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-STG_DATA_HUGE_FNO-55_90t28p2d /database/cigtdmd01/oradata/stg_data_huge_03.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-STG_DATA_HUGE_FNO-56_ait28rc1 /database/cigtdmd01/oradata/stg_data_huge04.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-EODS_DATA_FNO-57_ajt28rc4 /database/cigtdmd01/oradata/eods_data_07.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-STG_IDX_LARGE_FNO-58_akt28rc7 /database/cigtdmd01/oradata/stg_idx_large_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-STG_IDX_SMALL_FNO-59_alt28rca /database/cigtdmd01/oradata/stg_idx_small_01.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-FISERV_GTWY_OL_DATA_FNO-60_irt9jf8q /database/cigtdmd01/oradata/FISERV_GTWY_OL_DATA06.dbf
+scp /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-FISERV_GTWY_OL_IDX_FNO-61_itt9jfc3 /database/cigtdmd01/oradata/FISERV_GTWY_OL_IDX_d01.dbf
+
+
+**************************************************** LXORA12CINFS02 ****************************************************
+
+> df -h /database2
+Filesystem                          Size  Used Avail Use% Mounted on
+/dev/mapper/databasevg-database_lv  1.7T  1.2T  504G  70% /database2
+
+mkdir /database2/cigtdmd01
+mkdir /database2/cigtdmd01/oradata
+mkdir /database2/ccigtdmd01
+mkdir /database2/ccigtdmd01/oradata
+mkdir /database2/ccigtdmd01/oradata/pdbseed
+mkdir /database2/ccigtdmd_admn01
+mkdir /database2/ccigtdmd_admn01/admin
+mkdir /database2/ccigtdmd_admn01/admin/adump
+mkdir /database2/ccigtdmd_admn01/admin/audit
+mkdir /database2/ccigtdmd_admn01/admin/bct
+mkdir /database2/ccigtdmd_admn01/admin/diag
+mkdir /database2/ccigtdmd_admn01/admin/utldump
+mkdir /database2/ccigtdmd_arch01
+mkdir /database2/ccigtdmd_arch01/arch
+mkdir /database2/ccigtdmd_redo01
+mkdir /database2/ccigtdmd_redo01/oractl
+mkdir /database2/ccigtdmd_redo01/oralog
+mkdir /database2/ccigtdmd_redo02
+mkdir /database2/ccigtdmd_redo02/oractl
+mkdir /database2/ccigtdmd_redo02/oralog
+
+touch /database2/cigtdmd01/oradata/test
+
+ln -s /database2/cigtdmd01 /database
+ln -s /database2/ccigtdmd01 /database
+ln -s /database2/ccigtdmd_admn01 /database
+ln -s /database2/ccigtdmd_arch01 /database
+ln -s /database2/ccigtdmd_redo01 /database
+ln -s /database2/ccigtdmd_redo02 /database
+
+sudo su -
+vi /etc/fstab
+
+mkdir /rbkbak/ora_cigtdmd_arch_ch0
+mount /rbkbak/ora_cigtdmd_arch_ch0
+
+mkdir /rbkbak/ora_cigtdmd_ch0
+mount /rbkbak/ora_cigtdmd_ch0
+
+> ls -lrt /rbkbak/ora_cigtdmd_arch_ch0/*
+-rw-r-----. 1 oracle dba     4829184 Aug 22 15:07 /rbkbak/ora_cigtdmd_arch_ch0/arch-CCIGTDMD_3114982085_20346_1_1016982457
+-rw-r-----. 1 oracle dba    25034752 Aug 22 15:07 /rbkbak/ora_cigtdmd_arch_ch0/control_CCIGTDMD_c-3114982085-20190822-06
+
+> ls -lrt /rbkbak/ora_cigtdmd_ch0
+
+
+### Image copy test ###
+
+cd /app/oracle/scripts
+nohup cigtdmd_restore_copy.sh &
+RMAN-06094: datafile 5 must be restored
+ORA-01152: file 1 was not restored from a sufficiently old backup
+
+
+set lines 200 pages 200
+COL "FILE#" FORMAT 9990
+col name format a60
+col FNAME format a60
+select NVL(bu.DF_FILE#,df.file#) "FILE#", bu.FNAME, df.name
+from V$BACKUP_FILES bu full outer join v$datafile df
+	on bu.DF_FILE#=df.file#
+where bu.BACKUP_TYPE='COPY' and bu.FILE_TYPE='DATAFILE'
+and (bu.FNAME is null or df.name is null)
+order by 1;
+
+
+rman target / catalog rman@rman12d
+CATALOG START WITH '/rbkbak/ora_cigtdmd_arch_ch0/';
+CATALOG START WITH '/rbkbak/ora_cigtdmd_ch0/';
+File Name: /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-USERS_FNO-11_amt28rce
+File Name: /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-SYSAUX_FNO-7_9qt28r9e
+File Name: /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-SYSTEM_FNO-5_9st28r9s
+File Name: /rbkbak/ora_cigtdmd_ch0/data_D-CCIGTDMD_I-3114982085_TS-TOOLS_FNO-10_a3t28rai
+
+-- 2nd try
+nohup cigtdmd_restore_copy.sh &
+Fri Aug 23 15:48:27 EDT 2019
+    CON_ID NAME                           OPEN_MODE
+---------- ------------------------------ ----------
+         1 CDB$ROOT                       READ WRITE
+         2 PDB$SEED                       READ ONLY
+         3 CIGTDMD                        READ WRITE
+Fri Aug 23 17:27:35 EDT 2019
+Total Time 1:39 hours
+
+-- drop DB
+select name, dbid, open_mode from V$CONTAINERS order by con_id;
+alter pluggable database all close;
+DROP PLUGGABLE DATABASE CIGTDMD INCLUDING DATAFILES;
+
+shutdown immediate;
+startup restrict mount;
+DROP DATABASE;
+
+-- clean up files
+rm /database/cigtdmd01/oradata/*.dbf
+rm /database/ccigtdmd01/oradata/*.dbf
+rm /database/ccigtdmd01/oradata/pdbseed/*.dbf
+rm $ORACLE_HOME/dbs/*cigtdmd*
+
+
+### Normal backup test ###
+
+cd /app/oracle/scripts
+nohup cigtdmd_restore_normal.sh &
+Fri Aug 23 17:59:14 EDT 2019
+ORA-01547: warning: RECOVER succeeded but OPEN RESETLOGS would get error below
+ORA-01152: file 1 was not restored from a sufficiently old backup 
+RMAN-03002: failure of recover command at 08/23/2019 19:56:25
+
+
+-- 2nd try
+nohup cigtdmd_restore_normal_v2.sh &
+Fri Aug 30 10:10:57 EDT 2019
+    CON_ID NAME                           OPEN_MODE
+---------- ------------------------------ ----------
+         1 CDB$ROOT                       READ WRITE
+         2 PDB$SEED                       READ ONLY
+         3 CIGTDMD                        READ WRITE
+Fri Aug 30 11:44:12 EDT 2019
+Total Time = 1:34 hours
+
+
+-- drop DB
+select name, dbid, open_mode from V$CONTAINERS order by con_id;
+alter pluggable database all close;
+DROP PLUGGABLE DATABASE CIGTDMD INCLUDING DATAFILES;
+
+shutdown immediate;
+startup restrict mount;
+DROP DATABASE;
+
+-- clean up files
+rm /database/cigtdmd01/oradata/*.dbf
+rm /database/ccigtdmd01/oradata/*.dbf
+rm /database/ccigtdmd01/oradata/pdbseed/*.dbf
+rm $ORACLE_HOME/dbs/*cigtdmd*
+
+
+### Copy backup test - 2nd run ###
+
+nohup cigtdmd_restore_copy_v2.sh &

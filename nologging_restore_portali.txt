@@ -1,0 +1,641 @@
+###########################
+# No logging restore test #
+# 9/10/2019               #
+###########################
+
+***************************************** Drop DB *****************************************
+
+-- LXORA12CINFS03
+. oraenv
+cportali
+/app/oracle/product/db/12c/1
+
+sqlplus / as sysdba
+startup
+ORA-01147: SYSTEM tablespace file 1 is offline
+ORA-01110: data file 1: '/database/cportali01/oradata/system01.dbf'
+
+shutdown immediate
+
+select name, dbid, open_mode from V$CONTAINERS order by con_id;
+alter pluggable database all close;
+DROP PLUGGABLE DATABASE portali INCLUDING DATAFILES;
+
+shutdown immediate;
+startup restrict mount;
+DROP DATABASE;
+
+-- clean up files
+rm /database/portali01/oradata/*.dbf
+rm /database/cportali01/oradata/*.dbf
+rm /database/cportali01/oradata/pdbseed/*.dbf
+rm $ORACLE_HOME/dbs/*portali*
+
+rm /database/cportali_admn01/metadata/*
+rm /database/cportali_admn01/admin/audit/*
+rm -R /database/cportali_admn01/admin/diag/rdbms
+rm /database/cportali_arch01/arch/*
+rm /database/portali02/oradata/*.dbf
+rm /database/portali03/oradata/*.dbf
+
+
+***************************************** Recover *****************************************
+
+-- Directories
+mkdir /database/cportali_admn01/admin/adump
+
+mkdir /database/cportali01
+mkdir /database/cportali01/oradata
+mkdir /database/cportali01/oradata/pdbseed
+mkdir /database/cportali_admn01
+mkdir /database/cportali_admn01/admin
+mkdir /database/cportali_admn01/metadata
+mkdir /database/cportali_admn01/admin/audit
+mkdir /database/cportali_admn01/admin/bct
+mkdir /database/cportali_admn01/admin/diag
+mkdir /database/cportali_admn01/admin/utldump
+mkdir /database/cportali_arch01
+mkdir /database/cportali_arch01/arch
+mkdir /database/cportali_redo01
+mkdir /database/cportali_redo01/oractl
+mkdir /database/cportali_redo01/oralog
+mkdir /database/cportali_redo02
+mkdir /database/cportali_redo02/oractl
+mkdir /database/cportali_redo02/oralog
+mkdir /database/portali01
+mkdir /database/portali01/oradata
+mkdir /database/portali02
+mkdir /database/portali02/oradata
+mkdir /database/portali03
+mkdir /database/portali03/oradata
+
+
+df -h /rbkbak/*portali*
+Filesystem                                        Size  Used Avail Use% Mounted on
+10.144.3.37:/mnt/managedvolume/9d3985dc_channel0  493G   17G  451G   4% /rbkbak/ora_portali_arch_ch0
+10.144.3.55:/mnt/managedvolume/26467909_channel0  237G   70G  155G  31% /rbkbak/ora_portali_ch0
+
+. oraenv
+cportali
+/app/oracle/product/db/12c/1
+
+echo "db_name='cportali'" > $ORACLE_HOME/dbs/initcportali.ora
+
+ls -lrt /rbkbak/ora_portali_arch_ch0/control*
+-rw-r-----. 1 oracle dba 19922944 Sep 10 14:33 /rbkbak/ora_portali_arch_ch0/control_CPORTALI_c-3570434245-20190910-1d
+
+export NLS_DATE_FORMAT='DD-MON-YYYY HH24MISS'
+
+rman target /
+STARTUP NOMOUNT PFILE='$ORACLE_HOME/dbs/initcportali.ora';
+RESTORE SPFILE TO '$ORACLE_HOME/dbs/spfilecportali.ora' FROM '/rbkbak/ora_portali_arch_ch0/control_CPORTALI_c-3570434245-20190910-1d';
+STARTUP FORCE NOMOUNT;
+RMAN-04014: startup failed: ORA-00821: Specified value of sga_target 852M is too small, needs to be at least 976M
+
+sqlplus / as sysdba
+shutdown immediate
+startup nomount;
+ORA-00821: Specified value of sga_target 852M is too small, needs to be at least 976M
+
+cd $ORACLE_HOME/dbs
+mv initcportali.ora initcportali.ora.dummy
+cat spfilecportali.ora > initcportali.ora
+rm spfilecportali.ora
+
+vi initcportali.ora
+
+sqlplus / as sysdba
+STARTUP MOUNT PFILE='$ORACLE_HOME/dbs/initcportali.ora';
+CREATE SPFILE='$ORACLE_HOME/dbs/spfilecportali.ora' FROM PFILE='$ORACLE_HOME/dbs/initcportali.ora';
+STARTUP FORCE NOMOUNT;
+
+restore controlfile to '/database/cportali_redo01/oractl/control01.ctl' from '/rbkbak/ora_portali_arch_ch0/control_CPORTALI_c-3570434245-20190910-1d';
+restore controlfile to '/database/cportali_redo02/oractl/control02.ctl' from '/rbkbak/ora_portali_arch_ch0/control_CPORTALI_c-3570434245-20190910-1d';
+ALTER DATABASE MOUNT;
+
+LIST INCARNATION;
+DB Key  Inc Key DB Name  DB ID            STATUS  Reset SCN  Reset Time
+------- ------- -------- ---------------- --- ---------- ----------
+1       1       CPORTALI 3570434245       PARENT  1594143    28-MAR-2017 221530
+2       2       CPORTALI 3570434245       CURRENT 3226754    07-JUL-2017 110128
+
+CATALOG START WITH '/rbkbak/ora_portali_ch0/';
+CATALOG START WITH '/rbkbak/ora_portali_arch_ch0/';
+
+list BACKUP OF ARCHIVELOG ALL;
+
+run
+{
+    SET UNTIL TIME "TO_DATE('09-SEP-2019 14:33','DD-MON-YYYY HH24:MI')";
+    restore database;
+    recover database;
+    ALTER DATABASE OPEN RESETLOGS;
+}
+Finished recover at 10-SEP-2019 153839
+
+
+sqlplus / as sysdba
+select con_id, name, open_mode from v$containers;
+    CON_ID NAME                           OPEN_MODE
+---------- ------------------------------ ----------
+         1 CDB$ROOT                       READ WRITE
+         2 PDB$SEED                       READ ONLY
+         3 PORTALI                        READ WRITE
+
+
+***************************************** Corruption test *****************************************
+
+sqlplus / as sysdba
+alter session set container=portali;
+truncate table ggtest.row_count_linux;
+
+set lines 150 pages 200
+set serveroutput on
+declare
+  cursor cf is
+    select db.name, ins.host_name,
+	  tb.owner, tb.table_name, tb.status
+	from DBA_TABLES tb, v$instance ins, v$database db
+	where tb.IOT_TYPE is null and owner not in ('ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS')
+	and (tb.owner, tb.table_name) not in (select owner, table_name from dba_external_tables);
+  record_count number;
+  sql_str      varchar2(2000);
+  rec cf%rowtype;
+begin
+  open cf;
+  loop
+    fetch cf
+      into rec;
+    exit when cf%notfound;
+    sql_str := 'select count(1) from "' || rec.owner || '"."' || rec.table_name || '"';
+    execute immediate sql_str into record_count;
+    dbms_output.put_line(rec.owner || ',' || rec.table_name || ',' || rec.status || ',' || record_count);
+    insert into ggtest.row_count_linux
+    values
+      (rec.name, rec.host_name, rec.owner, rec.table_name, rec.status, record_count);
+	commit;
+  end loop;
+  close cf;
+end;
+/
+PL/SQL procedure successfully completed.
+
+
+***************************************** Nologging row count *****************************************
+
+declare
+  cursor cf is
+    select db.name, ins.host_name,
+	  tb.owner, tb.table_name, tb.status
+	from DBA_TABLES tb, v$instance ins, v$database db
+	where tb.IOT_TYPE is null and owner not in ('ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS')
+	and (tb.owner, tb.table_name) not in (select owner, table_name from dba_external_tables)
+	and logging='NO' and TEMPORARY='N' and dropped='NO'
+	order by 1,2,3,4;
+  record_count number;
+  sql_str      varchar2(2000);
+  rec cf%rowtype;
+begin
+  open cf;
+  loop
+    fetch cf
+      into rec;
+    exit when cf%notfound;
+    sql_str := 'select count(1) from "' || rec.owner || '"."' || rec.table_name || '"';
+    execute immediate sql_str into record_count;
+    dbms_output.put_line(rec.owner || ',' || rec.table_name || ',' || rec.status || ',' || record_count);
+  end loop;
+  close cf;
+end;
+/
+
+ACORD_STAGING,ADDRESS,VALID,331
+ACORD_STAGING_ARCH,ADDRESS,VALID,22027
+ATG_CORE7,ALT_CHANNEL,VALID,2
+CSR_PRTL,USER_T_LOGIN_HISTORY,VALID,695
+IVR,GLB_T_PRIVACY_MAIL,VALID,100
+
+
+***************************************** Import Metadata *****************************************
+
+sqlplus / as sysdba
+alter session set container=portali;
+set lines 150 pages 200
+select * from dba_directories;
+SYS
+NOLOGMETA
+/database/cportali_admn01/metadata
+
+
+vi /app/oracle/tns_admin/tnsnames.ora
+portali, portali.world =
+  (DESCRIPTION = (ADDRESS_LIST = (ADDRESS = (COMMUNITY = tcp.world)
+  (PROTOCOL = TCP)(HOST = lxora12cinfs03.conseco.ad)(PORT = 1521)))
+  (CONNECT_DATA = (SERVICE_NAME = portali)))
+
+
+scp lxoraodst01:/database/cportali_admn01/metadata/expdp_nolog_meta.dmp /database/cportali_admn01/metadata
+impdp \"system@portali\" DIRECTORY=NOLOGMETA DUMPFILE=expdp_nolog_meta.dmp LOGFILE=impdp_nolog_meta.log TABLE_EXISTS_ACTION=REPLACE CONTENT=ALL
+Job "SYSTEM"."SYS_IMPORT_FULL_01" completed with 174 error(s) at Tue Sep 10 16:28:11 2019 elapsed 0 00:02:22
+
+ORA-39083: Object type CONSTRAINT:"ATG_CORE7"."PAF_REGIONDEFPK" failed to create with error:
+ORA-14063: Unusable index exists on unique/primary constraint key
+Failing sql is:
+ALTER TABLE "ATG_CORE7"."PAF_REGION_DEF" ADD CONSTRAINT "PAF_REGIONDEFPK" PRIMARY KEY ("REGION_DEF_ID") USING INDEX "ATG_CORE7"."PAF_REGIONDEFPK"  ENABLE
+
+ORA-39083: Object type REF_CONSTRAINT:"ATG_CORE7"."PAF_TITLE_TEMPL1_F" failed to create with error:
+ORA-02270: no matching unique or primary key for this column-list
+Failing sql is:
+ALTER TABLE "ATG_CORE7"."PAF_TITLE_TEMPLATE" ADD CONSTRAINT "PAF_TITLE_TEMPL1_F" FOREIGN KEY ("TEMPLATE_DM") REFERENCES "ATG_CORE7"."PAF_DISPLAY_MODES" ("DISPLAY_MODES_ID") ENABLE
+
+
+-- DataPump Import (IMPDP) Reports ORA-14063 When Loading Constraints (Doc ID 2446610.1)
+SOLUTION: After impdp, rebuild index on target database
+
+
+***************************************** Nologging row count *****************************************
+
+sqlplus / as sysdba
+set lines 150 pages 200
+set serveroutput on
+alter session set container=portali;
+declare
+  cursor cf is
+    select db.name, ins.host_name,
+	  tb.owner, tb.table_name, tb.status
+	from DBA_TABLES tb, v$instance ins, v$database db
+	where tb.IOT_TYPE is null and owner not in ('ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS')
+	and (tb.owner, tb.table_name) not in (select owner, table_name from dba_external_tables)
+	and logging='NO' and TEMPORARY='N' and dropped='NO'
+	order by 1,2,3,4;
+  record_count number;
+  sql_str      varchar2(2000);
+  rec cf%rowtype;
+begin
+  open cf;
+  loop
+    fetch cf
+      into rec;
+    exit when cf%notfound;
+    sql_str := 'select count(1) from "' || rec.owner || '"."' || rec.table_name || '"';
+    execute immediate sql_str into record_count;
+    dbms_output.put_line(rec.owner || ',' || rec.table_name || ',' || rec.status || ',' || record_count);
+  end loop;
+  close cf;
+end;
+/
+
+ACORD_STAGING,ADDRESS,VALID,0
+ACORD_STAGING_ARCH,ADDRESS,VALID,0
+ATG_CORE7,ALT_CHANNEL,VALID,0
+CSR_PRTL,USER_T_LOGIN_HISTORY,VALID,0
+IVR,GLB_T_PRIVACY_MAIL,VALID,0
+
+
+-- check tables from import errors
+select count(*) from "ATG_CORE7"."PAF_REGION_DEF";
+0
+
+select count(*) from "ATG_CORE7"."PAF_TITLE_TEMPLATE";
+0
+
+-- index health
+col owner format a30
+col index_name format a30
+col tablespace_name format a30
+select owner, index_name, tablespace_name, status
+from dba_indexes
+where owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+and logging='NO' and TEMPORARY='N' and dropped='NO' and status!='VALID'
+order by 1,2;
+OWNER                          INDEX_NAME                     TABLESPACE_NAME                STATUS
+------------------------------ ------------------------------ ------------------------------ --------
+AGT_SERVICE_LVL                PK_SLVL_TLK_SERVICE_LVL        TBLSP_NOLOG                    UNUSABLE
+AGT_SERVICE_LVL                PK_SLVL_T_AGENT_INFO           TBLSP_NOLOG                    UNUSABLE
+AGT_SERVICE_LVL                PK_SLVL_T_AGT_PHONE_NBR        TBLSP_NOLOG                    UNUSABLE
+AGT_SERVICE_LVL                PK_SLVL_T_PHONE_NBR            TBLSP_NOLOG                    UNUSABLE
+ATG_CORE7                      ALT_CHANNEL_PK                 TBLSP_NOLOG                    UNUSABLE
+70 rows selected.
+
+ALTER INDEX ATG_CORE7.ALT_CHANNEL_PK REBUILD;
+
+select owner, index_name, tablespace_name, status
+from dba_indexes where owner='ATG_CORE7' and index_name='ALT_CHANNEL_PK';
+OWNER                          INDEX_NAME                     TABLESPACE_NAME                STATUS
+------------------------------ ------------------------------ ------------------------------ --------
+ATG_CORE7                      ALT_CHANNEL_PK                 TBLSP_NOLOG                    VALID
+
+set pages 0
+spool /database/cportali_admn01/metadata/rebuild_indexes.sql
+select 'ALTER INDEX '||owner||'.'||index_name||' REBUILD;'
+from dba_indexes
+where owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+and logging='NO' and TEMPORARY='N' and dropped='NO' and status!='VALID';
+spool off
+@/database/cportali_admn01/metadata/rebuild_indexes.sql
+(none invalid)
+
+-- partitioned indexes
+col index_owner format a30
+select index_owner, index_name, tablespace_name, status
+from dba_ind_partitions
+where index_owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+and logging='NO' and status!='VALID'
+order by 1,2;
+no rows selected
+
+
+-- constraints
+col table_name format a30
+col constraint_name format a30
+select tab.owner, tab.table_name, dc.constraint_name, dc.constraint_type, dc.status
+from dba_constraints dc join dba_tables tab
+  on dc.owner = tab.owner and dc.table_name=tab.table_name
+where tab.logging='NO' and tab.TEMPORARY='N' and tab.dropped='NO' and dc.status!='ENABLED'
+and tab.owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+order by 1,2,3;
+OWNER                          TABLE_NAME                     CONSTRAINT_NAME                C STATUS
+------------------------------ ------------------------------ ------------------------------ - --------
+ACORD_STAGING                  ADDRESS                        FK_ADDRESS_PARTY               R DISABLED
+ACORD_STAGING                  AGENTNOTIFICATIONCODE          FK_AGENTCODE_APPLINFOEXT       R DISABLED
+35 rows selected.
+(same as in live DB)
+
+
+***************************************** Tablespace row count *****************************************
+
+sqlplus / as sysdba
+set lines 150 pages 200
+set serveroutput on
+alter session set container=portali;
+declare
+  cursor cf is
+    select tb.owner, tb.table_name, tb.logging
+	from DBA_TABLES tb
+	where owner not in ('ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS')
+	and tb.tablespace_name='TBLSP_NOLOG'
+	order by 1,2;
+  record_count number;
+  sql_str      varchar2(2000);
+  rec cf%rowtype;
+begin
+  open cf;
+  loop
+    fetch cf
+      into rec;
+    exit when cf%notfound;
+    sql_str := 'select count(1) from "' || rec.owner || '"."' || rec.table_name || '"';
+    execute immediate sql_str into record_count;
+    dbms_output.put_line(rec.owner || ',' || rec.table_name || ',' || rec.logging || ',' || record_count);
+  end loop;
+  close cf;
+end;
+/
+
+EPUB_BIZLINK,DMS_TOPIC_ENTRY,YES,0
+EPUB_BIZLINK,DPS_CONTACT_INFO,YES,0
+EPUB_BIZLINK,DPS_USER,YES,0
+EPUB_BIZLINK,DPS_USER_ADDRESS,YES,0
+EPUB_BIZLINK,DPS_USER_ROLES,YES,0
+EPUB_BIZLINK,DSS_DPS_ADMIN_PROP,YES,0
+EPUB_BIZLINK,DSS_DPS_ADMIN_REG,YES,0
+EPUB_BIZLINK,DSS_DPS_ADMIN_UP,YES,0
+EPUB_BIZLINK,DSS_DPS_CLICK,YES,0
+EPUB_BIZLINK,DSS_DPS_EVENT,YES,0
+EPUB_BIZLINK,DSS_DPS_INBOUND,YES,0
+
+insert into EPUB_BIZLINK.DPS_USER
+(ID, LOGIN, AUTO_LOGIN, PASSWORD, MEMBER, FIRST_NAME, LAST_NAME, LASTACTIVITY_DATE, EMAIL_STATUS, RECEIVE_EMAIL, GENDER)
+values
+('47657502','cdpljp',0,'ed4fc16555eb9f24bb1a8f73d435a2dd',0,'Jamie','Long',to_date('12/07/2007','MM/DD/YYYY'),0,1,1);
+commit;
+
+
+***************************************** Export Live Data *****************************************
+
+-- CO 
+-- LXORAODST01
+alter session set container=portali;
+SET ECHO OFF
+SET DEFINE OFF
+SET ESCAPE OFF
+SET FEEDBACK ON
+SET HEAD ON
+SET SERVEROUTPUT ON SIZE 1000000
+SET TERMOUT ON
+SET TIMING OFF
+SET LINES 2500
+SET PAGES 0
+SET TRIMSPOOL ON
+SET LONG 10000
+SET NUMFORMAT 999999999999999990
+WHENEVER SQLERROR CONTINUE
+spool /database/cportali_admn01/metadata/portali_metadata_table_exp.par
+DECLARE
+  CURSOR c1 IS
+	select owner, table_name
+	from dba_tables
+	where owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+	and logging='NO' and TEMPORARY='N' and dropped='NO'
+	union  
+	select distinct table_owner, table_name
+	from dba_tab_partitions
+	where table_owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+	and logging='NO';
+  vOwner	VARCHAR2(30);
+  vTable	VARCHAR2(30);
+  x			PLS_INTEGER;
+BEGIN
+  DBMS_OUTPUT.PUT_LINE('DIRECTORY=NOLOGMETA');
+  DBMS_OUTPUT.PUT_LINE('DUMPFILE=portali_metadata_table_exp.dmp');
+  DBMS_OUTPUT.PUT_LINE('LOGFILE=portali_metadata_table_exp.log');
+  DBMS_OUTPUT.PUT_LINE('PARALLEL=1');
+  DBMS_OUTPUT.PUT_LINE('METRICS=Y');
+  DBMS_OUTPUT.PUT_LINE('CONTENT=METADATA_ONLY');
+  DBMS_OUTPUT.PUT('TABLES=');
+  
+  x := 1;
+  OPEN c1;
+  LOOP
+    FETCH c1 INTO vOwner, vTable;
+	EXIT WHEN c1%NOTFOUND;
+	  IF x = 1 THEN
+        DBMS_OUTPUT.PUT(vOwner||'.'||vTable);
+      ELSE
+        DBMS_OUTPUT.PUT(','||vOwner||'.'||vTable);
+      END IF;
+	  x := x + 1;
+  END LOOP;
+  DBMS_OUTPUT.NEW_LINE;
+  CLOSE c1;
+END;
+/
+SPOOL OFF
+
+vi /database/cportali_admn01/metadata/portali_metadata_table_exp.par
+
+
+
+expdp \"system@portali\" PARFILE=/database/cportali_admn01/metadata/portali_metadata_table_exp.par
+expdp \"system@portali\" DIRECTORY=NOLOGMETA DUMPFILE=portali_TBLSP_NOLOG_exp.dmp LOGFILE=portali_TBLSP_NOLOG_exp.log CONTENT=ALL TABLESPACES=TBLSP_NOLOG
+
+scp /database/cportali_admn01/metadata/portali_metadata_table_exp.dmp lxora12cinfs03:/database/cportali_admn01/metadata/
+scp /database/cportali_admn01/metadata/portali_TBLSP_NOLOG_exp.dmp lxora12cinfs03:/database/cportali_admn01/metadata/
+
+
+***************************************** Reload Tables *****************************************
+
+. oraenv
+cportali
+/app/oracle/product/db/12c/1
+
+impdp \"system@portali\" DIRECTORY=NOLOGMETA DUMPFILE=portali_TBLSP_NOLOG_exp.dmp LOGFILE=portali_TBLSP_NOLOG_imp.log TABLE_EXISTS_ACTION=REPLACE CONTENT=ALL
+
+ORA-39083: Object type CONSTRAINT:"ATG_CORE7"."PAF_TITLETMPLPK" failed to create with error:
+ORA-14063: Unusable index exists on unique/primary constraint key
+Failing sql is:
+ALTER TABLE "ATG_CORE7"."PAF_TITLE_TEMPLATE" ADD CONSTRAINT "PAF_TITLETMPLPK" PRIMARY KEY ("TITLE_TEMPLATE_ID") USING INDEX "ATG_CORE7"."PAF_TITLETMPLPK"  ENABLE
+
+ORA-39083: Object type REF_CONSTRAINT:"ATG_CORE7"."PAF_TITLE_TEMPL1_F" failed to create with error:
+ORA-02270: no matching unique or primary key for this column-list
+Failing sql is:
+ALTER TABLE "ATG_CORE7"."PAF_TITLE_TEMPLATE" ADD CONSTRAINT "PAF_TITLE_TEMPL1_F" FOREIGN KEY ("TEMPLATE_DM") REFERENCES "ATG_CORE7"."PAF_DISPLAY_MODES" ("DISPLAY_MODES_ID") ENABLE
+
+
+-- fix indexes
+sqlplus / as sysdba
+alter session set container=portali;
+set pages 0
+spool /database/cportali_admn01/metadata/rebuild_indexes.sql
+select 'ALTER INDEX '||owner||'.'||index_name||' REBUILD;'
+from dba_indexes
+where owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+and logging='NO' and TEMPORARY='N' and dropped='NO' and status!='VALID';
+spool off
+@/database/cportali_admn01/metadata/rebuild_indexes.sql
+
+-- table row counts
+set lines 150 pages 200
+set serveroutput on
+declare
+  cursor cf is
+    select tb.owner, tb.table_name, tb.logging
+	from DBA_TABLES tb
+	where owner not in ('ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS')
+	and tb.tablespace_name='TBLSP_NOLOG'
+	order by 1,2;
+  record_count number;
+  sql_str      varchar2(2000);
+  rec cf%rowtype;
+begin
+  open cf;
+  loop
+    fetch cf
+      into rec;
+    exit when cf%notfound;
+    sql_str := 'select count(1) from "' || rec.owner || '"."' || rec.table_name || '"';
+    execute immediate sql_str into record_count;
+    dbms_output.put_line(rec.owner || ',' || rec.table_name || ',' || rec.logging || ',' || record_count);
+  end loop;
+  close cf;
+end;
+/
+
+EPUB_BIZLINK_STAGE,PAF_DEVICE_OUTPUT,YES,242
+EPUB_BIZLINK_STAGE,PAF_DEVICE_OUTPUTS,YES,242
+EPUB_BIZLINK_STAGE,PAF_DISPLAY_MODES,YES,139
+
+
+***************************************** Import Metadata 2 *****************************************
+
+impdp \"system@portali\" DIRECTORY=NOLOGMETA DUMPFILE=portali_metadata_table_exp.dmp LOGFILE=portali_metadata_table_imp.log TABLE_EXISTS_ACTION=REPLACE CONTENT=ALL
+
+-- fix indexes
+sqlplus / as sysdba
+alter session set container=portali;
+set pages 0
+spool /database/cportali_admn01/metadata/rebuild_indexes.sql
+select 'ALTER INDEX '||owner||'.'||index_name||' REBUILD;'
+from dba_indexes
+where owner not in ('GGS','ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS','SQLTXPLAIN','GGTEST','SQLTUNE')
+and logging='NO' and TEMPORARY='N' and dropped='NO' and status!='VALID';
+spool off
+@/database/cportali_admn01/metadata/rebuild_indexes.sql
+
+-- table row counts
+set lines 150 pages 200
+set serveroutput on
+declare
+  cursor cf is
+    select tb.owner, tb.table_name, tb.logging
+	from DBA_TABLES tb
+	where owner not in ('ANONYMOUS','APEX_030200','APEX_040200','APPQOSSYS','AUDSYS','AUTODDL','CTXSYS','DB_BACKUP','DBAQUEST','DBSNMP','DMSYS','DVF','DVSYS','EXFSYS','FLOWS_FILES','GSMADMIN_INTERNAL','INSIGHT','LBACSYS','MDSYS','OJVMSYS','OLAPSYS','ORDDATA','ORDSYS','OUTLN','RMAN','SI_INFORMTN_SCHEMA','SYS','SYSTEM','WMSYS','XDB','XS$NULL','DIP','ORACLE_OCM','ORDPLUGINS','OPS$ORACLE','UIMMONITOR','AUTODML','ORA_QUALYS_DB','APEX_PUBLIC_USER','GSMCATUSER','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','SYSBACKUP','SYSDG','SYSKM','SYSMAN','MGMT_USER','MGMT_VIEW','OWB$CLIENT','OWBSYS','TRCANLZR','GSMUSER','MDDATA','PDBADMIN','OWBSYS_AUDIT','TSMSYS')
+	and tb.tablespace_name='TBLSP_NOLOG'
+	order by 1,2;
+  record_count number;
+  sql_str      varchar2(2000);
+  rec cf%rowtype;
+begin
+  open cf;
+  loop
+    fetch cf
+      into rec;
+    exit when cf%notfound;
+    sql_str := 'select count(1) from "' || rec.owner || '"."' || rec.table_name || '"';
+    execute immediate sql_str into record_count;
+    dbms_output.put_line(rec.owner || ',' || rec.table_name || ',' || rec.logging || ',' || record_count);
+  end loop;
+  close cf;
+end;
+/
+
+ACORD_STAGING_ARCH,PARTY,NO,0
+ACORD_STAGING_ARCH,PERSON,NO,0
+ACORD_STAGING_ARCH,PHONE,NO,0
+ACORD_STAGING_ARCH,POLICY,NO,0
+ACORD_STAGING_ARCH,PRODUCER,NO,0
+...
+EPUB_BIZLINK_STAGE,DSS_DPS_EVENT,YES,16375623
+EPUB_BIZLINK_STAGE,DSS_DPS_INBOUND,YES,0
+EPUB_BIZLINK_STAGE,DSS_DPS_PAGE_VISIT,YES,3287099
+EPUB_BIZLINK_STAGE,PAF_DEVICE_OUTPUT,YES,242
+EPUB_BIZLINK_STAGE,PAF_DEVICE_OUTPUTS,YES,242
+EPUB_BIZLINK_STAGE,PAF_DISPLAY_MODES,YES,139
+
+
+***************************************** Drop DB *****************************************
+
+-- LXORA12CINFS03
+. oraenv
+cportali
+/app/oracle/product/db/12c/1
+
+sqlplus / as sysdba
+select name, dbid, open_mode from V$CONTAINERS order by con_id;
+NAME                                 DBID OPEN_MODE
+------------------------------ ---------- ----------
+CDB$ROOT                       3570434245 READ WRITE
+PDB$SEED                       2598137892 READ ONLY
+PORTALI                        1406449072 READ WRITE
+
+alter pluggable database all close;
+DROP PLUGGABLE DATABASE portali INCLUDING DATAFILES;
+
+shutdown immediate;
+startup restrict mount;
+DROP DATABASE;
+
+rm -R /database/cportali01
+rm -R /database/cportali_admn01
+rm -R /database/cportali_arch01
+rm -R /database/cportali_redo01
+rm -R /database/cportali_redo02
+rm -R /database/portali01
+rm -R /database/portali02
+rm -R /database/portali03
+
+sudo su -
+umount /rbkbak/ora_portali_ch0
+umount /rbkbak/ora_portali_arch_ch0
+
+vi /etc/fstab
