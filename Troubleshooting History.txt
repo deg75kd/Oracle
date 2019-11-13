@@ -1,0 +1,787 @@
+#############
+# ORA-00054 #
+#############
+
+What:	ORA-00054: resource busy and acquire with NOWAIT specified or timeout expired
+When:	Running AWESTEP_ADD_PART
+
+-- allow 30 second wait for blocking lock:
+ALTER SESSION SET ddl_lock_timeout=30;
+
+
+#############
+# ORA-00604 #
+# ORA-00942 #
+# ORA-06512 #
+#############
+
+What:	drop table IA_INS_BROK
+	           *
+	ERROR at line 1:
+	ORA-00604: error occurred at recursive SQL level 1
+	ORA-00942: table or view does not exist
+	ORA-06512: at line 19
+Where:	sqlplus
+
+ALTER TRIGGER MDSYS.SDO_GEOR_DROP_USER DISABLE;
+
+
+#############
+# ORA-00604 #
+# ORA-04063 #
+# ORA-06508 #
+# ORA-06512 #
+#############
+
+What:	CONNECT INSREPD00/&12@&1
+	ERROR:
+	ORA-00604: error occurred at recursive SQL level 1
+	ORA-04063: package body "DW2.VPD_PKG" has errors
+	ORA-06508: PL/SQL: could not find program unit being called: "DW2.VPD_PKG"
+	ORA-06512: at line 3
+Where:	DWRH5
+When:	During refresh
+
+
+#############
+# ORA-02020 #
+#############
+
+What:	ORA-02020: too many database links in use
+Where:	APEX
+When:	Loading a page that uses many DB links
+
+-- change open_links and open_links_per_session parameters
+
+
+#############
+# ORA-12547 #
+#############
+
+What:	Could not load program oracle:
+	rtld: 0712-001 Symbol fc_softc was referenced
+	      from module oracle(), but a runtime definition
+	            of the symbol was not found.
+	rtld: 0712-002 fatal error: exiting.
+	ERROR:
+	ORA-12547: TNS:lost contact
+Where:	sqlplus
+When:	trying to connect
+
+Why:	Unrelated Oracle home recently deinstalled
+Fix:	Stop all DBs and run relink on current home
+
+
+#############
+# ORA-24247 #
+# ORA-06512 #
+#############
+
+What:	ORA-24247: network access denied by access control list (ACL)
+	ORA-06512: at "SYS.UTL_TCP", line 17
+	ORA-06512: at "SYS.UTL_TCP", line 267
+	ORA-06512: at "SYS.UTL_SMTP", line 161
+	ORA-06512: at "SYS.UTL_SMTP", line 197
+When:	Running AWESTEP_ADD_PART
+
+-- Grant the priviledge directly to the user instead of granting it to the role:
+begin 
+  dbms_network_acl_admin.create_acl ( 
+	acl => 'mailserver_acl.xml', 
+	description => 'Mail ACL', 
+	principal => 'TEST1_USER', 
+	is_grant => TRUE, 
+	privilege => 'connect'); 
+  end;
+/
+
+
+#############
+# ORA-04031 #
+#############
+
+What:	ORA-04031: unable to allocate 4160 bytes of shared memory ("shared pool","unknown object","sga heap(1,0)","modification ")
+Where:	Alert log; returned to some user processes/queries
+When:	Anytime
+Why:	When any attempt to allocate a large piece of contiguous memory in the shared pool fails Oracle first flushes all objects that are not currently in use from the pool and the resulting free memory chunks are merged. If there is still not a single chunk large enough to satisfy the request the ORA-04031 error is returned.
+Fix:	Check for resizing errors & adjust components (???)
+
+-- check for errors resizing memory
+col component for a25 head "Component" 
+col status format a10 head "Status" 
+col parameter for a25 heading "Parameter" 
+col "Initial" format 999,999,999,999
+col "Final" format 999,999,999,999
+col changed head "Changed At" 
+select component, parameter, (initial_size/1024/1024) "Initial", (final_size/1024/1024) "Final", 
+   status, to_char(end_time ,'mm/dd/yyyy hh24:mi:ss') changed 
+from v$memory_resize_ops 
+where end_time>=to_date('&what_time','YYYYMMDDHH24MI') order by 6;
+
+
+#############
+# ORA-04031 #
+# ORA-00371 #
+# ORA-00821 #
+#############
+
+What:	ORA-04031: unable to allocate 2097184 bytes of shared memory ("shared pool","unknown object",...
+Where:	DB after 11g upgrade
+When:	Startup
+
+-- Set up Automatic Memory Management
+-- Removed from initflxgsa.ora
+flxgsa.__db_cache_size=72024588288
+flxgsa.__java_pool_size=16777216
+flxgsa.__large_pool_size=16777216
+flxgsa.__streams_pool_size=0
+-- Changed
+*.sga_target=75161927680		to 0
+*.pga_aggregate_target=37580963840	to 0
+-- Added
+*.memory_max_target=169114337280
+*.memory_target=112742891520
+
+
+What:	ORA-00371: not enough shared pool memory, should be atleast 778462822 bytes
+	ORA-00821: Specified value of sga_target 71936M is too small, needs to be at least 72960M
+	ORA-04031: unable to allocate 2097184 bytes of shared memory ("shared pool","unknown object","sga heap(6,0)","_db_block_
+Where:	DB after 11g upgrade
+When:	Startup (different error depending on settings at the time)
+
+-- Change the following:
+*.db_cache_size=0
+*.large_pool_size=0
+*.java_pool_size=0
+*.sga_max_size=255G (total RAM on box)
+*.sga_target=
+*.shared_pool_size=0
+
+
+#############
+# ORA-04020 #
+# ORA-00604 #
+# ORA-00018 #
+#############
+
+What:	ORA-04020: deadlock detected while trying to lock object 26
+	Continuous massive concurrency peaks in OEM
+Where:	ADMN trace files (lots of them)
+When:	Continuously since startup
+	After changing ms8stats password (dba_users.user_id=26 for ms8stats)
+
+Operations ran post-refresh config and restarted the reporting service
+
+
+What:	ORA-00604: error occurred at recursive SQL level 1
+	ORA-00018: maximum number of sessions exceeded
+	ORA-00020: maximum number of processes (500) exceeded
+Where:	ADMN alert log; ORA-00018 when attempting to login
+When:	After DB refreshed or Microstrategy started or ms8stats password changed
+Note:	Lots of contention from ORACLE.EXE (SHAD) processes
+Fix:	Operations corrected password in MS app; bounced DB; restarted MS
+
+
+#############
+# ORA-01113 #
+# ORA-01110 #
+#############
+
+What:	alter database open;
+	ORA-01113: file 1 needs media recovery
+	ORA-01110: data file 1: 'D:\ORADATA\DEVA\WMADMN\ORACLE\ORADATA\ACTCUT\SYSTEM01.DBF'
+When:	After restoring DB with DB in mount mode
+
+SQL> recover database;
+Media recovery complete.
+
+SQL> alter database open;
+Database altered.
+
+
+#############
+# ORA-12514 #
+#############
+
+What:	ORA-12514:TNS:listener does not currently know of service requested in connect descriptor
+When:	connecting via sqlplus as sysdba
+Where:	locally
+Why:	The TWO_TASK environment variable was set in the user profile.  It was pointing to a tnsnames entry that was configured
+		to connect via the listener using a TCP connect string.
+Fix:	unset TWO_TASK
+
+
+##############
+# ORA-19607  #
+# RMAN-06188 #
+# RMAN-06496 #
+# RMAN-06403 #
+##############
+
+What:	RESTORE CONTROLFILE to 'D:\oradata\DEVA\wmadmn\Oracle\Oradata\ACTCUT\control01.ctl' FROM tag TAG20110202T094938;
+	ORA-19607: D:\ORADATA\DEVA\WMADMN\ORACLE\ORADATA\ACTCUT\CONTROL01.CTL is an active control file
+When:	With DB mounted
+
+What:	set dbid = 3533962851;
+	RMAN-06188: cannot use command when connected to a mounted target database
+When:	With DB mounted
+
+What:	RESTORE CONTROLFILE FROM tag TAG20110202T094938;
+	RMAN-06496: must use the TO clause when the database is mounted or open
+When:	With DB mounted
+
+What:	restore controlfile from 'W:\ORACLE\ACTCUT\FLASHRECOVERY\ACTCUT_20110202_40_742038684';
+	RMAN-06403: could not obtain a fully authorized session
+When:	With DB mounted
+
+DB must be in nomount mode for these commands
+
+
+##############
+# RMAN-06900 #
+# RMAN-06094 #
+##############
+
+What:	recover database from tag='TAG20110202T094938';
+	RMAN-06900: WARNING: unable to generate V$RMAN_STATUS or V$RMAN_OUTPUT row
+	RMAN-06094: datafile 1 must be restored
+When:	DB mounted
+
+-- DB must be restore before being recovered
+restore database from tag='TAG20110202T094938';
+Finished restore at 03-FEB-11
+
+
+#############
+# ORA-19870 #
+# ORA-19573 #
+#############
+
+What:	run
+	{
+		set UNTIL TIME "TO_DATE('03/02/2011 14:41','DD/MM/YYYY HH24:MI')";
+		restore tablespace ACTDW_X1M;
+		recover tablespace ACTDW_X1M;
+	}
+	ORA-19870: error while restoring backup piece U:\FLASH_RECOVER_ACTCUT\RMAN\ACTCUT_20110203_1_742142424
+	ORA-19573: cannot obtain exclusive enqueue for datafile 5
+When:	Running TSPITR with DB open
+
+Restart DB in mount mode
+
+
+##############
+# RMAN-20207 #
+# ORA-19723  #
+##############
+
+What:	RMAN-20207: UNTIL TIME or RECOVERY WINDOW is before RESETLOGS time
+	ORA-19723: Cannot recreate plugged in read-only datafile 5
+Where:	RMAN
+When:	Trying to open DB
+
+-- resetting incarnation may resolve errors
+LIST INCARNATION;
+RESET DATABASE TO INCARNATION x;
+
+
+##############
+# RMAN-03002 #
+# RMAN-06183 #
+##############
+
+What:	RMAN-03002: failure of backup plus archivelog command at 06/11/2012 09:55:49
+	RMAN-06183: datafile or datafile copy larger than MAXSETSIZE: file# 8 D:\ORADATA\DEVB\ADMN\ORACLE\ADMN\MS_STATS_X128K01.DBF
+Where:	RMAN command line or log
+When:	Performing backup
+
+-- change mexsetsize parameter
+configure maxsetsize to 16g;
+configure maxsetsize to unlimited;
+
+
+#############
+# ORA-00322 #
+# ORA-00312 #
+# ORA-03113 #
+#############
+
+What:	ORA-00322: log 3 of thread 1 is not current copy
+	ORA-00312: online log 3 thread 1: 'X:\ORACLE\ORADATA\SDE\FLXSDE\REDO\REDO03.LOG'
+When:	Trying to open the DB during a refresh
+
+-- !!! make sure it's looking at the right redo files - check file timestamps !!!
+
+-- from [ID 1016968.102]
+-- this may be necessary for all log files
+-- may need to take DB out of archivelog mode
+ALTER DATABASE CLEAR LOGFILE '&filename';
+
+
+What:	ORA-03113: end-of-file on communication channel
+When:	Trying to open the DB during a refresh, possibly after doing the above for some log files
+
+-- repeat above for all log files
+-- start db normally (don't use resetlogs)
+
+
+#############
+# ORA-03113 #
+#############
+
+What:	ORA-03113: end-of-file on communication channel
+		Process ID: 18855
+		Session ID: 615 Serial number: 34802
+When:	Trying to start the DB
+Why:	Archive log file is full
+
+
+What:	ORA-03113: end-of-file on communication channel
+		Process ID: 18855
+		Session ID: 615 Serial number: 34802
+When:	Trying to start the DB
+Why:	Missing online redo logs
+
+
+#############
+# ORA-00338 #
+# ORA-00312 #
+#############
+
+What:	ORA-00338: log 1 of thread 1 is more recent than control file
+	ORA-00312: online log 1 thread 1: 'X:\ORACLE\ORADATA\DEVB\DW3DEVB\REDO\REDO01.LOG'
+When:	Starting DB from idle
+Why:	DEVBX setup using same redo log groups
+
+What:	ORA-00338: log 5 of thread 1 is more recent than control file
+	ORA-00312: online log 5 thread 1: 'X:\ORACLE\ORADATA\SDE\WMSDE\REDO\REDO05.LOG'
+When:	Opening DB
+Why:	Snap taken while DB open
+
+-- DB must be recovered to the time set in the control file
+alter session set nls_date_format='DD-MON-YY HH24:MI';
+select controlfile_time from v$database;
+alter database recover database until time '13-DEC-2012 11:01';
+alter database open resetlogs;
+
+
+#############
+# ORA-01341 #
+#############
+
+-- alert log
+Wed Aug 22 11:37:46 2012
+krvxerpt: Errors detected in process 69, role builder.
+krvxmrs: Leaving by exception: 1341
+Errors in file D:\ORADATA\DW3\GENERAL\ADMIN\diag\rdbms\dw3\dw3\trace\dw3_ms07_4616.trc:
+ORA-01341: LogMiner out-of-memory
+LOGMINER: session#=62 (CDC$C_ACTURIS_CHGSET), builder MS07 pid=69 OS id=4616 sid=373 stopped
+Errors in file D:\ORADATA\DW3\GENERAL\ADMIN\diag\rdbms\dw3\dw3\trace\dw3_ms07_4616.trc:
+ORA-01341: LogMiner out-of-memory
+
+-- trace file
+LOGMNR 1341: about to throw ORA-1341, gather memory usage info: 
+LOGMNR 1341: amountNeeded: orig: 21296, stillNeeded: 21296, 
+             Region MemSize: 53840.
+...
+LOGMNR 1341: LOGMNR session heap in use: 591837264, totalAllocated: 664573960
+...
+LOGMNR 1341: ***** SUMMARY INFORMATION ***** 
+LOGMNR 1341: Session MaxMem      536870912
+             Session MemSize     536838368
+             Unspillable MemSize 1413539
+             Region MemSize      53840
+LOGMNR 1341: if Region MemSize or unspillableTotal is close to
+             Session MaxMem size(say >80 percent of MaxMem size),
+             you may be hitting a known LogMnr limitation. 
+             Or archive compression may have caused this problem.
+             Otherwise there might be a memory leak. 
+LOGMNR 1341: in any case, please send this diagnostic info to 
+             Oracle support. 
+             Meanwhile, increasing LogMnr max_sga to 590581428 or higher 
+             will likely bypass this trouble spot.
+
+Why:	This is not the same as space required for the streams buffer pool - which is separate.
+Fix:	exec dbms_capture_adm.set_parameter('STRMADMIN_CAPTURE','_SGA_SIZE','50');	-- sets hidden parameter to 50M
+	If you change the value of the hidden capture parameter _SGA_SIZE, then you should also 
+	  increase the streams_pool_size (10.1 and above) correspondingly
+
+-- find value
+col parameter format a30
+col value format a52
+select * from DBA_CAPTURE_PARAMETERS where parameter like '%SGA%' order by capture_name, parameter;
+
+
+#############
+# ORA-00030 #
+#############
+
+What:	ORA-00030: User session ID does not exist.
+When:	Trying to kill a session that is active
+
+-- from sqlplus
+select d.name, spid, s.sid, s.serial#, osuser, s.program 
+from v$database d, v$process p, v$session s where p.addr=s.paddr and s.sid=&what_sid;
+
+-- from windows prompt using spid from above
+D:\Oracle\Product\10.2.0\db_2\BIN\orakill <dbname> <spid>
+
+
+#############
+# ORA-01092 #
+# ORA-30012 #
+#############
+
+What:	ORA-01092: ORACLE instance terminated. Disconnection forced
+	ORA-30012: undo tablespace 'UNDOTBS1' does not exist or of wrong type
+When:	On first startup after cloning a DB (files changed, NEWID run)
+Fix:	Check the value of undo_tablespace in the parameter file - the copy was set to
+	UNDOTBS01, I was using UNDOTBS1
+
+
+###########
+# 12560   #
+# ORA-609 #
+###########
+
+What:	Connections to DB hang unless setting ORACLE_SID on server
+	TNS-12560: TNS:protocol adapter error
+	opiodr aborting process unknown ospid (10896) as a result of ORA-609
+Where:	Connection issues everywhere
+	Errors in alert log
+When:	After changing the logon user for DB or listener service
+Why:	Listener has to run as user with at least as much privilege as DB user
+	(eg. DB runs as DEV\sde_dbadmin; listener can't run as Local System)
+
+
+#############
+# ORA-29283 #
+# ORA-06512 #
+#############
+
+What:	ORA-29283: invalid file operation
+	ORA-06512: at "SYS.UTL_FILE", line 536
+When:	Using UTL_FILE package
+
+Why 1:	Folder that directory points to doesn't exist
+Fix:	Create the folder or change the directory (if it's a local dir, it has to be on the server where the DB is running)
+
+Why 2:	The user the DB runs as doesn't have permissions on it (especially for remote locations)
+Fix:	Change the windows service for the DB & listener
+
+Why 3:	The directory path is case-sensitive
+Fix:	Drop and recreate the directory using the correct case
+
+
+#############
+# ORA-39126 #
+# ORA-24019 #
+#############
+
+What:	ORA-39126: Worker unexpected fatal error in KUPW$WORKER.PROCESS_TABLE_EXISTS_ACTION [TABLE:"SYSMAN"."AQ$_MGMT_HOST_PING_QTABLE_G"]
+	ORA-24019: identifier for QUEUE_TABLE too long, should not be greater than 24 characters
+When:	Using data pump import with TABLE_EXISTS_ACTION=REPLACE
+Why:	Bug 14393900 (see ID 14393900.8)
+Fix:	Drop table before importing replacement
+
+
+#############
+# ORA-01122 #
+# ORA-01110 #
+# ORA-01207 #
+#############
+
+What:	ORA-01122: database file 1 failed verification check
+	ORA-01110: data file 1: 'D:\ORADATA\GDE\ACTURIS\ORACLE\ACTURIS9\DATA_02\SYSTEM01.DBF'
+	ORA-01207: file is more recent than control file - old control file
+When:	When opening the DB
+Why:	Control files & datafiles are out of sync
+Fix:	ORA-1122, ORA-1110, ORA-1207 while open the database after crash [ID 283927.1]
+Note:	Can only be used if no major changes have been made (new temp files are fine)
+
+
+1.Mount the database
+SQL> Startup mount
+ 
+2. Save the information from the control file:
+SQL> Alter database backup controlfile to trace;
+
+3. Create a control file creation script from the tracefile generated in user_dump_dest.
+Use the Noresetlogs option
+ 
+4. Shutdown the database and start it in NOMOUNT mode
+SQL> shutdown abort
+SQL> startup nomount
+ 
+5. Create the control file
+Use the script generated by the 'backup controlfile to trace' command above. 
+Please refer to: Note 735106.1 - How to Recreate a Controlfile
+ 
+6.Recover the database
+SQL> recover database;
+
+7. Open the database
+SQL> Alter database open;
+
+
+#############
+# ORA-01196 #
+# ORA-01110 #
+#############
+
+What:	ORA-01196: file 1 is inconsistent due to a failed media recovery session
+	ORA-01110: data file 1: 'D:\ORADATA\RC\ACTURIS\DATA_02\SYSTEM01.DBF'
+When:	alter database activate physical standby database;
+Why:	Recovery was canceled while recovering an archivelog
+Fix:	Taken from [ID 1150720.1]
+Note:	You don't care whether the standby is in-sync w/ primary
+
+1. Cancel Managed Recovery 
+SQL> recover managed standby database cancel;
+ 
+2. Start manual recovery
+SQL> recover automatic standby database;
+
+3. Provide the archive log file that the recovery asks at the prompt, 
+   then enter CANCEL when the prompt occurs again.
+
+4. Activate the standby database
+SQL> alter database activate standby database;
+ 
+5. Shutdown and Startup the database.
+SQL>shutdown immediate;
+SQL>startup;
+
+
+
+
+ORA-01034: ORACLE not available
+ORA-27101: shared memory realm does not exist
+
+The Connect Descriptor was (DESCRIPTION=(ADDRESS_LIST = (ADDRESS=(PROTOCOL=tcp)(HOST=ACTTESTListener)(PORT=1521)))(CONNECT_DATA=(SID=ACTTEST)(SERVER=DEDICATED))) 
+ 
+
+#############
+# ORA-01578 #
+# ORA-01110 #
+#############
+
+What:	ORA-01578: ORACLE data block corrupted (file # 15, block # 1515481)
+	ORA-01110: data file 15: 'D:\ORADATA\SDE\FLEXI\DATA_01\FLX_TABLES_X4M03.DBF'.
+
+Fix:	Taken from [ID 1578.1]
+
+1. Verify absolute file number (AFN)
+select file_id AFN, relative_fno, file_name from dba_data_files where file_name='&what_file';
+
+2. Identify corrupt object
+select * from dba_extents
+where file_id = &AFN and &BL between block_id AND block_id + blocks - 1;
+
+3. Run commands from ORA-1578_dbms_repair.sql (in Troubleshooting folder)
+
+
+#############
+# ORA-01017 #
+# ORA-16191 #
+#############
+
+What:	CDC logs not shipping to DW3
+	Error 1017 received logging on to the standby
+	------------------------------------------------------------
+	Check that the primary and standby are using a password file
+	and remote_login_passwordfile is set to SHARED or EXCLUSIVE, 
+	and that the SYS password is same in the password files.
+	      returning error ORA-16191
+Where:	Error in alert log of ACT or FLX
+When:	After creating new password files
+Fix:	Copy one password file to use for the other 2 DBs
+	remote_login_passwordfile may need to be set to SHARED
+
+
+#############
+# ORA-01555 #
+# ORA-22924 #
+#############
+
+What:	ORA-01555: snapshot too old: rollback segment number  with name "" too small
+	ORA-22924: snapshot too old
+When:	Performing action against LOB
+
+Troubleshooting ORA-01555 - snapshot too old: rollback segment number "string" with name "string" too small (Doc ID 1580790.1)
+In this case 1555 error is reported while accessing UNDO data stored inside LOB segment.
+
+ORA-01555 And Other Errors while Exporting Table With LOBs, How To Detect Lob Corruption. [ID 452341.1]
+Export Fails With ORA-2354 ORA-1555 ORA-22924 and How To Confirm LOB Segment Corruption Using Export Utility? [ID 833635.1]
+
+
+#############
+# ORA-02085 #
+#############
+
+What:	ORA-02085: database link DSGD_DBL connects to DSGD
+Where:	Using a DB link in DB where global_names parameter is set to TRUE
+Fix1:	Set global_names to FALSE (no bounce required)
+	alter system set global_names='FALSE' scope=both;
+Fix2:	Change DB link to same name as DB
+	DROP PUBLIC DATABASE LINK DSGD_DBL;
+	CREATE PUBLIC DATABASE LINK DSGD
+	USING '(DESCRIPTION = (ADDRESS_LIST = (ADDRESS= (COMMUNITY = tcp.world) (PROTOCOL = TCP)(HOST = dsgd_pkg.conseco.com)(PORT = 1521))) (CONNECT_DATA = (SID = dsgd)))';
+
+
+#############
+# ORA-01628 #
+#############
+
+What:	ORA-01628: max # extents (32765) reached for rollback segment _SYSSMU1_2644393$
+When:	During long-running transaction
+
+Troubleshooting ORA-1628 – max # extents (32765) reached for rollback segment (Doc ID 1580182.1)
+With automatic undo, you have no control over the extent sizes, nor do you have the ability to shrink them. This all happens automatically. The system automatically decides on the extent size, however it will generally start allocating larger extents if an undo segment is extending a lot. The large number of extents in the rollback segment is likely due to fragmentation in the undo tablespace: Oracle can probably only allocate extents of 64k due to fragmentation, so it is very probable to hit the max extents issue.
+The maximum number of extents for undo segments is limited to 32K and a long/large running transaction can exhaust this limit by adding new extents if the next extent of the current one is not an expired one and finally will receive ORA-1628.
+So, after getting the ORA-1628 errors in the transaction that extended the undo segment until its limit, future transactions will not be allowed to bind to the undo segment until it is not shrinked (you may see that the number of extents is decreased).
+So, The two major causes of ORA-1628 issue are a very large transaction or undo tablespace fragmentation.
+
+Fix1:	In case of large transaction, That is solved by splitting the large transaction to smaller ones (e.g. frequent commits).
+Fix 2:	In case of undo tablespace fragmentation, That is solved by recreating the undo tablespace (this is also the recommended solution of Bug 10330444 and Bug 10229998 which were filed for the same issue and closed as not a bug).
+
+
+#############
+# ORA-01950 #
+# ORA-02063 #
+#############
+
+What:	ORA-01950: no privileges on tablespace 'USERS'
+	ORA-02063: preceding line from ORA_DSGM_DBL
+When:	Inserting over a DB link
+Why:	Table owner does not have quota in tablespace
+Fix:	ALTER USER audit_gkpr QUOTA unlimited ON users;
+
+
+#############
+# ORA-01116 #
+# ORA-01110 #
+#############
+
+What:	ORA-01116: error in opening database file 18
+		ORA-01110: data file 18: '/database/cdbnewdb01/oradata/tools01.dbf'
+		ORA-27041: unable to open file
+When:	Tried to drop tablespace
+Why:	File was already deleted
+Fix:	startup mount
+		alter database datafile '/database/cdbnewdb01/oradata/tools01.dbf' offline drop;
+		alter database open;
+		drop tablespace tools including contents;
+
+
+/*************** ORACLE GATEWAY / DATA DIRECT ***************/
+
+#############
+# ORA-28545 #
+#############
+
+What:	ORA-28545: error diagnosed by Net8 when connecting to an agent
+	Unable to retrieve text of NETWORK/NCR message 65535
+	ORA-02063: preceding 2 lines from SQLPTDEV
+When:	Running query using SQLPTDEV DB link to SQL Server
+
+Fix:	How to Resolve Common Errors Encountered while using Database Gateways (DG4IFMX, Dg4MSQL, DG4SYBS), DG4ODBC or Generic Connectivity 
+        (Doc ID 234517.1)
+	1. Check the listener status
+	   - it should show at least one service for the gateway SID and status is 'unknown'
+           - make sure that the listener was stopped and started after the listener.ora file was edited
+        2. Check the SQL*Net config
+           - tnsping <gateway alias>
+        3. Check SID config in the listener and tnsnames.ora
+        4. Program executable
+           - Check if calling the program executables on the command line returns a welcome message
+           - /nomove/app/oracle/gateway/11g/6/bin/dg4odbc
+        5. Other root causes
+           - enable listener tracing and check file after retrying select statement
+           - check that ORACLE_HOME in listener.ora file is correct
+
+#############
+# ORA-28500 #
+#############
+
+What:	ORA-28500: connection from ORACLE to a non-Oracle system returned this message:
+	ORA-02063: preceding line from SQLPTDEV
+When:	Running query using SQLPTDEV DB link to SQL Server
+
+Details:Gateway listener.ora had
+		(SID_NAME=MYSQL_LINK)
+	but the gateway initialisation file is called
+		initMYSQL.ora
+	The gateway initialisation file name should match the listener SID_NAME so should be renamed to
+		initMYSQL_LINK.ora
+
+Also:	Check the settings in initsbtosqlptdev.ora (especially if DD upgraded recently)
+
+
+/*************** DATA GUARD ***************/
+
+#############
+# ORA-01275 #
+#############
+
+What:	ALTER DATABASE RENAME FILE 'D:\ORADATA\DQI\DATA\ACTQUEUE_X4M10.DBF' TO 'D:\oradata\DQI\Data\DATA_02\ACTQUEUE_X4M10.DBF';
+	ORA-01275: Operation RENAME is not allowed if standby file management is automatic.
+Where:	Data Guard
+
+alter system set standby_file_management='MANUAL' scope=both;
+
+
+#############
+# ORA-01111 #
+# ORA-01110 #
+#############
+
+What:	ORA-01111: name for data file 37 is unknown - rename to correct file
+	ORA-01110: data file 37: 'D:\ORACLE\PRODUCT\11.2.0\DBHOME_11203\DATABASE\UNNAMED00037'
+Where:	Data guard alert log 
+When:	After creating a new file in primary DB that conflicts with existing file when created on DG
+
+-- make file mgmt manual & rename file
+alter system set standby_file_management='MANUAL' scope=both;
+ALTER DATABASE RENAME FILE 'D:\ORACLE\PRODUCT\11.2.0\DBHOME_11203\DATABASE\UNNAMED00037' TO 'D:\oradata\DQI\Data\DATA_02\ACTQUEUE_X128K04.DBF';
+
+
+#############
+# ORA-01511 #
+# ORA-01141 #
+# ORA-01111 #
+# ORA-01110 # 
+# ORA-27041 #
+#############
+
+What:	ALTER DATABASE RENAME FILE 'D:\ORACLE\PRODUCT\11.2.0\DBHOME_11203\DATABASE\UNNAMED00037' TO 'D:\oradata\DQI\Data\DATA_02\ACTQUEUE_X128K04.DBF';
+	ORA-01511: error in renaming log/data files
+	ORA-01141: error renaming data file 37 - new file 'D:\oradata\DQI\Data\DATA_02\ACTQUEUE_X128K04.DBF' not found
+	ORA-01111: name for data file 37 is unknown - rename to correct file
+	ORA-01110: data file 37: 'D:\ORACLE\PRODUCT\11.2.0\DBHOME_11203\DATABASE\UNNAMED00037'
+	ORA-27041: unable to open file
+	OSD-04002: unable to open file
+	O/S-Error: (OS 2) The system cannot find the file specified.
+Where:	Data guard
+When:	After making file management manual
+
+-- from [ID 1329399.1]
+alter database create datafile 'D:\ORACLE\PRODUCT\11.2.0\DBHOME_11203\DATABASE\UNNAMED00037' as 'D:\oradata\DQI\Data\DATA_02\ACTQUEUE_X128K04.DBF';
+alter system set standby_file_management='AUTO' scope=both;
+ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT FROM SESSION;
+
+
+#############
+# ORA-00059 #
+#############
+
+What:	ORA-00059: maximum number of DB_FILES exceeded
+	Recovery interrupted!
+Where:	Data guard alert log
+When:	After increasing db_files on PROD
+Fix:	Change db_files on data guard
+
+alter system set db_files=1000 scope=spfile;
+shutdown immediate;
+startup mount;
+ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT FROM SESSION;

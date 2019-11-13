@@ -1,0 +1,141 @@
+-- find a string within a file
+-- /B matches beginning of line
+-- /N print line number
+-- /F file
+-- /S current dir & subdirectories
+-- *.log looks in all .log files in working directory
+FINDSTR /N /B "ORA-" *.log
+
+FINDSTR "TYPE" *.sql > droptypes.sql
+
+FINDSTR /N "DEADLOCK" *.trc
+/I	not case-sensitive
+
+findstr /L /C:"err = 3135" *.trc
+/L user literal string
+/C ths string
+
+findstr "05-OCT-2011" fslacturis.log >> 05-OCT-2011.log
+>> copies matches to a new file
+
+-- count files that match
+findstr "ORA-12560" D:\*.* | find /C "ORA-12560"
+
+
+-- compare 2 files
+-- /N how many lines to compare; only compares sizes without this
+COMP file1.txt file2.txt /A /L /N=100
+
+FC /L /N file1.txt file2.txt
+
+
+-- copy files but keep ownership (use for bus stop)
+robocopy "source folder" "Target Folder" /e /copy:DATO
+eg. robocopy "\\office\dfs\Replicated\BusStop\Production\DB\20120325\QA" "\\devoem2\d$\DBBUSSTOP\10120325\QA" /e /copy:DATO
+robocopy "\\office\dfs\Replicated\BusStop\UAT\DB\20130121" "\\devoem2\d$\DBBusstop\20130121" /e /copy:DATO
+
+-- find machine's IP address
+nslookup
+
+-- find a machine's connections & processes
+netstat -ano 
+
+-- find out if a port is free
+netstat -ano|findstr <port_no>
+netstat -ano|findstr 2001
+netstat -ano|findstr 54000
+
+-- spool the output of a command
+command.bat > output.log
+-- spool and append
+command.bat >> output.log
+
+-- pass a variable to a batch file (option 1 - good for more than 9 variables)
+-- must call as runbatch.bat username-password-dbsid-workingdir-scriptname (with hyphens)
+set extrapass=%1
+for /F "tokens=1-5 delims=-" %%a in ("%extrapass%") do ( 
+		set username=%%a
+		set password=%%b
+		set dbsid=%%c
+		set workingdir=%%d
+		set scriptname=%%e
+	)
+sqlplus %username%/%password%@%dbsid%
+
+-- pass a variable to a batch file (option 2)
+REM 1 - ACTD00PWD
+REM 2 - ACTSID
+REM 3 - CUTDOWNPATH
+call %3\01_A_ACTD00_EXP\01_B_ACTD00_CUTDOWN_HARNESS.bat %1 %2
+
+-- option 2 with more than 9 variables
+SET SYSPWD=%1
+SET ACTSID=%2
+...
+SHIFT
+SHIFT
+SET ACTD00_PWD=%8
+SET ACTADMIN_PWD=%9
+sqlplus -s "actd00/%ACTD00_PWD%@%ACTSID%" @script.sql
+
+
+-- show date / time
+echo %date%
+echo %time%
+
+-- show system variables
+echo %oracle_sid%
+
+-- unmount a disk volume
+mountvol D:\oradata\GSASANTEST\ACT\Disk1 /p
+
+
+-- find PID
+sc queryex OracleServiceDQI
+-- kill a task
+taskkill /PID 827
+-- forcefully kill a task
+taskkill /PID 827 /F
+
+-- bounce a server
+shutdown -R -T 0 -F
+
+-- windows service commands
+sc start OracleServiceDQI
+sc stop OracleServiceDQI
+sc delete OracleOraDb11g_home1TNSListenerFSLACTURIS
+sc create OracleVirtualAgent-agentdw3demo12c binPath= "D:\oradata\UAT_DW3\agent_state\bin\emctl.bat"
+
+-- cluster commands
+cluster DEVDB03 resource OracleServiceACTDEMO /online
+cluster DEVDB03 resource OracleServiceACTDEMO /offline
+
+-- wait for some time
+choice /T 10 /D y /N
+/T - timeout in seconds
+/D - default option
+/N - don't display options text
+
+-- see members of a PMP group
+net group <group name> /domain
+net group GreenTeam /domain
+
+-- actions per minutes on listener
+cd D:\oracle\diag\tnslsnr\proddb9b\fslacturis\trace
+find /c "16-SEP-2013 09:40" fslacturis.log
+
+-- display files and times a string occurs
+@echo off
+setlocal enabledelayedexpansion
+set folder="C:\MYDIR\"
+set string=100101
+cd /d %folder%
+for /f "delims==" %%F in ('dir /b *.*') do (
+	 set filename=%%~nxF
+	 set /a count=0
+	 for /f "delims==" %%L in ('type "!filename!"') do (
+		 set line=%%L
+		 if "!line:~0,6!"=="%string%" set /a count+=1
+		 )
+		 echo !filename! !count!
+	 )
