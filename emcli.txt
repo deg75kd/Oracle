@@ -1,0 +1,230 @@
+###########
+# EM CLI  #
+# General #
+###########
+
+-- set env variables
+export OMS_HOME=/app/oracle/product/emcli
+export JAVA_HOME=/app/oracle/product/java/jre1.8.0_121
+
+-- check status
+$OMS_HOME/emcli setup
+
+-- set up for initial use
+$OMS_HOME/emcli setup -url="https://oracleem.cnoinc.com:7803/em" -username=sysman -trustall
+$OMS_HOME/emcli setup -url="https://lxoemp01.conseco.ad:7803/em" -username=sysman -trustall
+
+-- login/logout
+$OMS_HOME/emcli login -username="sysman"
+$OMS_HOME/emcli login -username="sysman" -password="xxx"
+$OMS_HOME/emcli logout
+
+
+###########
+# Targets #
+###########
+
+-- get target list
+$OMS_HOME/emcli get_targets -targets="oracle_database"
+$OMS_HOME/emcli get_targets -targets="oracle_pdb"
+
+-- search for database (case sensitive)
+$OMS_HOME/emcli get_targets -targets="cidwd:oracle_database"
+-- search with wildcard
+$OMS_HOME/emcli get_targets -targets="%DSGD%:oracle_pdb"
+-- search for host
+$OMS_HOME/emcli get_targets -targets="%lxora12cinfs02%:host"
+
+-- add target
+$OMS_HOME/emcli add_target -name="cinfdmd" -type="oracle_database" -host="lxoemp01" -credentials="UserName:dbsnmp;password:B5hu8a1i;Role:Normal" -properties="SID:cinfdmd;Port:1521;OracleHome:/app/oracle/product/db/12c/1;MachineName:lxoemp01" -emd_url=""
+$OMS_HOME/emcli add_target -name="ctestdbs" -type="oracle_database" -host="lxora12cinfs02.conseco.ad" -credentials="UserName:dbsnmp;password:B5hu8a1i;Role:Normal" -properties="SID:ctestdbs;Port:1521;OracleHome:/app/oracle/product/db/12c/2;MachineName:LXORA12CINFS02" -emd_url="lxoems02.conseco.ad"
+
+-- delete target
+$OMS_HOME/emcli delete_target -name="ctestdbs" -type="oracle_database"
+
+-- change 
+#$OMS_HOME/emcli modify_target -name="CDSGD_DSGD" -type="oracle_pdb" -properties="LifeCycle Status:Development;Department:INF"
+$OMS_HOME/emcli modify_target -name="CDSGD_DSGD" -type="oracle_pdb" -properties="orcl_gtp_lifecycle_status:Development;orcl_gtp_department:INF"
+
+-- show all properties for target type
+$OMS_HOME/emcli get_target_properties -target_type="oracle_pdb"
+
+-- list all properties for a database
+$OMS_HOME/emcli list -resource="TargetProperties" -search="TARGET_NAME ='CAEDBD_AEDBD'" -column="PROPERTY_NAME,PROPERTY_VALUE" -script
+orcl_gtp_department     INF
+orcl_gtp_lifecycle_status       Development
+
+-- get all target types
+$OMS_HOME/emcli get_target_types
+
+-- target types
+oracle_database_group
+oracle_database (instance)
+oracle_dbsys (system)
+host
+host_group
+oracle_listener
+oracle_pdb (pluggable)
+
+-- Target Data Verbs
+    add_target_property    				-- Add a new target property to all targets of the specified target type
+    get_target_properties  				-- List all property names for the target type provided
+    list_target_property_names   		-- List the names for target properties
+    list_targets_having_property_value	-- lists targets using specified property name and value
+    modify_lifecycle_stage_name  		-- Change the Lifecycle Stage name
+    remove_target_property 				-- Remove the target property from all targets of the specified target type
+    rename_target          				-- Rename the target
+    rename_targets_property_value      	-- Rename value for targets for a property name and value
+    modify_target          				-- Modify a target instance definition
+
+
+########
+# Jobs #
+########
+
+-- get job types
+$OMS_HOME/emcli get_job_types
+OSCommand
+RMANScript
+SQLScript
+multitask
+
+-- get job details
+$OMS_HOME/emcli describe_job -verbose -name="CIDWD_RMAN_JOB.1"
+
+emcli describe_job_type -verbose -type=RMANScript
+
+-- create new job
+$OMS_HOME/emcli create_job -input_file=property_file:/database/cinfdmd_admn01/scripts/rman_coldfull_cinfdmd.txt
+$OMS_HOME/emcli create_job -input_file="property_file:/app/oracle/scripts/ServiceCatalog/rman_job_test.txt"
+
+-- example job format
+name=CTESTDBS_RMAN_JOB.1
+type=RMANScript
+description=This job was created by emcli
+owner=SYSMAN
+target_list=ctestdbs:oracle_database
+targetType=oracle_database
+cred.defaultDBCred.<all_targets>:oracle_database=NAMED:SYSMAN:NC_DB_SYS
+cred.defaultHostCred.<all_targets>:oracle_database=NAMED:SYSMAN:NC_HOST_LINUX
+variable.rman_perl_script=SHOW ALL;
+variable.rman_perl_script=<<MULTILINE
+SHOW ALL;
+LIST BACKUP OF DATABASE;
+MULTILINE
+schedule.frequency=REPEAT_BY_DAYS
+schedule.interval=1
+schedule.startTime=2019-11-19 22:00:00
+
+-- Job Verbs
+    delete_job               -- Delete the specified job
+    describe_job             -- Describe a job
+    describe_job_type        -- Describe a job type
+    export_jobs              -- Export job details in to an xml file
+    get_job_execution_detail -- Display details of job execution
+    get_job_types            -- Lists all job types supported by EMCLI
+    get_jobs                 -- Get a list of existing jobs
+    import_jobs              -- Import job definitions from an xml file
+    job_input_file           -- Supply details for a job verb in a property file
+    job_target_criteria
+    resume_job               -- Resume a job or set of jobs
+    retry_job                -- Restart a previously failed job execution
+    stop_job                 -- Stop the specified job
+    suspend_job              -- Suspend a job or set of jobs
+
+
+##########
+# Groups #
+##########
+
+
+-- Group Verbs
+    create_group      	-- Create a group
+    delete_group      	-- Deletes a group
+    export_admin_group  -- Exports Admin Group Hierarchy
+    get_group_members 	-- Lists the members in a group
+    get_groups        	-- Lists all groups
+    import_admin_group  -- Imports Admin Group Hierarchy
+    modify_group      	-- Modify a group
+
+
+################
+# Installation #
+################
+
+/mnt/ora-sftwr-repo/OEM/OEM13C/OEM13cR2/EMCLI/emcliadvancedkit.jar
+
+export OMS_HOME=/app/oracle/product/emcli
+export JAVA_HOME=/app/oracle/product/java/jre1.8.0_121
+$JAVA_HOME/bin/java -jar /mnt/ora-sftwr-repo/OEM/OEM13C/OEM13cR2/EMCLI/emcliadvancedkit.jar -install_dir=/app/oracle/product/emcli
+
+$OMS_HOME/emcli setup -url="https://lxoemp01.conseco.ad:7803/em" -username=sysman -trustall
+
+
+-- LXORADWSD03
+export OMS_HOME=/app/oracle/product/emcli
+export JAVA_HOME=/app/oracle/product/db/12c/2/jdk
+
+$JAVA_HOME/bin/java -jar /mnt/ora-sftwr-repo/OEM/OEM13C/OEM13cR2/EMCLI/emcliadvancedkit.jar -install_dir=/app/oracle/product/emcli
+
+$OMS_HOME/emcli setup -url="https://lxoemp01.conseco.ad:7803/em" -username=sysman -trustall
+
+
+######################
+# Jython Interpreter #
+######################
+
+Beginning with Enterprise Manager Cloud Control version 12cR3, EM CLI includes an embedded Jython interpreter (Jython 2.5.3), 
+where all of the verbs are registered as functions, known as EM CLI verb functions or simply functions. Usage of these functions 
+is similar to the corresponding verb. In these functions, the parameters (supplied as key-value pairs) are those present in the 
+verb arguments.
+
+In Interactive mode, the interpreter opens a shell where you can type your commands. Using Script mode, you can run your Jython 
+program by passing it to the interpreter in a non-interactive fashion. For both modes, apart from using the EM CLI verb functions, 
+you can also program in Jython conventionally.
+
+# calling script
+emcli @scriptname.py
+
+# login
+login( username="SYSMAN", password="123456" )
+
+# script syntax
+verb( argument_name="value", 2nd_argument="value" )
+
+# add target
+add_target( name="",
+			type="oracle_database",
+			host="",
+			credentials="",
+			properties="" )
+			
+# update password
+update_db_password
+
+
+############
+# database #
+############
+
+. oraenv
+emrepus
+/u01/OracleHomes/db/product/dbhome_1
+
+cd /u01/OracleHomes/db/product/dbhome_1/bin
+./sqlplus / as sysdba
+
+set lines 150 pages 200
+COL target_name FOR A15
+COL target_type FOR A20
+COL host_name   FOR A20 
+COL emd_url     FOR A45
+SELECT target_name, target_type, host_name, emd_url 
+FROM   sysman.mgmt_targets 
+WHERE  target_type='oracle_database';
+
+TARGET_NAME     TARGET_TYPE          HOST_NAME            EMD_URL
+--------------- -------------------- -------------------- ---------------------------------------------
+emrepus         oracle_database      emcc.example.com     https://emcc.example.com:3872/emd/main/
+
+
