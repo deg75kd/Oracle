@@ -1,0 +1,202 @@
+##############################################
+# SQL Management Baselines Cleanup Procedure #
+##############################################
+http://teamsites.cnoinc.com/sites/it_infrastructure/it_database/94%20%20Oracle/SQL%20Management%20Baselines%20Cleanup%20Procedure.docx
+
+
+*********************** References ***********************
+
+-- Importing and Exporting SQL Plan Baselines
+http://docs.oracle.com/cd/E11882_01/server.112/e10821/optplanmgmt.htm#BABHFHIC (not valid)
+
+-- PSOUG Home - Oracle DBMS_SPM
+http://psoug.org/reference/dbms_spm.html
+
+
+*********************** Procedure ***********************
+
+1.	Verify the size of SQL_MANAGEMENT_BASE  
+set lines 150 pages 200
+COLUMN "Item" FORMAT A25
+COLUMN "Space Used (GB)" FORMAT 999.99
+COLUMN "Schema" FORMAT A25
+COLUMN "Move Procedure" FORMAT A40 
+SELECT occupant_name "Item",
+	space_usage_kbytes/1048576 "Space Used (GB)",
+	schema_name "Schema",
+	move_procedure "Move Procedure"
+FROM v$sysaux_occupants
+ORDER BY 1;
+
+2.	Check the record count to delete (Change the date as required)
+SELECT count(*) FROM sys.dba_sql_plan_baselines where enabled='YES' and created >= to_date('13/01/01','YY/MM/DD');
+
+3.	Create a Tablespace, SMB_STGTAB_DATA with Autoextend ON
+Note : Make sure that, free space is available on mount minimum of 1 ½ times size of SQL_MANAGEMENT_BASE table 
+
+4.	Create User, SMB_STGTAB_USER with SMB_STGTAB_DATA & TEMP as default with QUOTA unlimited.
+
+5.	Create SMB Stating Table
+set serveroutput on;
+BEGIN
+  DBMS_SPM.CREATE_STGTAB_BASELINE(
+    table_name => 'SMB_STGTAB_BASELINE', 
+	table_owner => 'SMB_STGTAB_USER', 
+	tablespace_name => 'SMB_STGTAB_DATA');
+END;
+/
+
+6.	Pack the SMB to Staging Table (backup)
+DECLARE
+  my_plans number;
+BEGIN
+  my_plans := DBMS_SPM.PACK_STGTAB_BASELINE(
+    table_name => 'SMB_STGTAB_BASELINE', 
+	table_owner => 'SMB_STGTAB_USER');
+END;
+/
+
+7.	drop the SMB for the specified period of time (change the date as required)
+set serveroutput on;
+declare
+   vResult Binary_Integer;
+   a integer :=1;
+begin
+   For vPlan In (SELECT distinct Plan_Name 
+                 FROM dba_sql_plan_baselines 
+				 where enabled='YES' and created >= to_date('13/03/01','YY/MM/DD')
+				)
+   Loop
+      vResult := dbms_spm.drop_sql_plan_baseline(sql_handle=>NULL, plan_name=>vPlan.Plan_Name);
+      a:=a+1;
+      If a >= 500 then
+        Commit;
+        a:=0;
+      End if;
+   End Loop;
+end;
+/
+
+### Note: ###
+
+1.	Monitor UNDO space usage while running the dbms_spm.drop_sql_plan_baseline. Increase UNDO space as needed.
+2.	Monitor Archive log Jobs and make sure that jobs are not hung up. If Archive log jobs are hung up, run the Stats on Fixed objects & Dictionary objects as SYSDBA
+
+exec dbms_stats.gather_fixed_objects_stats;
+EXECUTE dbms_stats.gather_dictionary_stats;
+
+
+*********************** blcdwsd ***********************
+
+-- LXORADWSD01
+SELECT count(*) FROM sys.dba_sql_plan_baselines;
+  COUNT(*)
+----------
+     25437
+
+Item                      Space Used (GB) Schema                    Move Procedure
+------------------------- --------------- ------------------------- ----------------------------------------
+SM/ADVISOR                           4.14 SYS
+SM/AWR                                .00 SYS
+SM/OPTSTAT                            .95 SYS
+SM/OTHER                              .19 SYS
+SQL_MANAGEMENT_BASE                   .76 SYS
+
+break on report;
+compute sum label "TOTAL" of "BASELINES" on report;
+SELECT to_char(LAST_EXECUTED,'YYYY-MM'), count(*) "BASELINES"
+FROM sys.dba_sql_plan_baselines
+where enabled='YES'
+group by to_char(LAST_EXECUTED,'YYYY-MM')
+order by 1;
+TO_CHAR  BASELINES
+------- ----------
+2019-02        805
+2019-03        795
+2019-04        891
+2019-05        661
+2019-06        526
+2019-07        488
+2019-08        695
+2019-09       2449
+2019-10       1080
+2019-11       4863
+2019-12        966
+2020-01       7021
+2020-02       1338
+              2859
+        ----------
+TOTAL        25437
+
+TABLESPACE_NAME                     FILES         MB        MaxB
+------------------------------ ---------- ---------- -----------
+SYSAUX                                  2      7,199      35,049
+TOOLS                                   1        200      32,000
+USERS                                   3     70,350      89,450
+
+-- Create SMB Stating Table
+set serveroutput on;
+BEGIN
+  DBMS_SPM.CREATE_STGTAB_BASELINE(
+    table_name => 'SMB_STGTAB_BASELINE', 
+	table_owner => 'SYS', 
+	tablespace_name => 'TOOLS');
+END;
+/
+ORA-19381: cannot create staging table in SYS schema
+
+BEGIN
+  DBMS_SPM.CREATE_STGTAB_BASELINE(
+    table_name => 'SMB_STGTAB_BASELINE', 
+	table_owner => 'SQLTUNE', 
+	tablespace_name => 'USERS');
+END;
+/
+PL/SQL procedure successfully completed.
+
+-- Pack the SMB to Staging Table (backup)
+DECLARE
+  my_plans number;
+BEGIN
+  my_plans := DBMS_SPM.PACK_STGTAB_BASELINE(
+    table_name => 'SMB_STGTAB_BASELINE', 
+	table_owner => 'SQLTUNE');
+END;
+/
+
+-- drop the SMB for the specified period of time (change the date as required)
+alter session set nls_date_Format='YYYY-MM-DD';
+SELECT distinct Plan_Name, LAST_EXECUTED
+FROM dba_sql_plan_baselines 
+where LAST_EXECUTED < (select (sysdate-90) from dual)
+order by LAST_EXECUTED;
+8819 rows selected.
+
+set serveroutput on;
+declare
+   vResult		Binary_Integer;
+   commit_ct	pls_integer :=0;
+   total_ct		pls_integer :=0;
+   day90		date;
+begin
+   select (sysdate-90) into day90 from dual;
+   For vPlan In (SELECT distinct Plan_Name 
+                 FROM dba_sql_plan_baselines 
+				 where LAST_EXECUTED < day90
+				)
+   Loop
+      vResult := dbms_spm.drop_sql_plan_baseline(sql_handle=>NULL, plan_name=>vPlan.Plan_Name);
+      commit_ct := commit_ct + 1;
+	  total_ct := total_ct + 1;
+      If commit_ct >= 500 then
+        dbms_output.put_line('Commit...');
+		Commit;
+        commit_ct:=0;
+      End if;
+   End Loop;
+   dbms_output.put_line('Complete: '||total_ct||' baselines purged');
+end;
+/
+Complete: 8819 baselines purged
+
+PL/SQL procedure successfully completed.

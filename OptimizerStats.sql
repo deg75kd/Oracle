@@ -287,6 +287,26 @@ XDB                                     1
 
 	
 /*** DICTIONARY SCHEMAS ***/
+
+set lines 150 pages 200
+col last_analyzed for a13
+set termout off
+set trimspool off
+set feedback off
+SELECT NVL(TO_CHAR(last_analyzed, 'MM/DD/YYYY'), 'NO STATS') last_analyzed, COUNT(*) dictionary_tables
+FROM dba_tables
+WHERE owner = 'SYS'
+GROUP BY TO_CHAR(last_analyzed, 'MM/DD/YYYY')
+ORDER BY 1 DESC;
+
+break on con_id;
+SELECT con_id, NVL(TO_CHAR(last_analyzed, 'MM/DD/YYYY'), 'NO STATS') last_analyzed, COUNT(*) dictionary_tables
+FROM cdb_tables
+WHERE owner = 'SYS' and con_id!=2
+GROUP BY con_id, TO_CHAR(last_analyzed, 'MM/DD/YYYY')
+ORDER BY 1 ASC, 2 DESC;
+
+
 -- Gather stats for dictionary schemas SYS, SYSTEM, etc.
 DBMS_STATS.GATHER_DICTIONARY_STATS (
    comp_id          VARCHAR2 DEFAULT NULL, 
@@ -319,6 +339,49 @@ DBMS_STATS.GATHER_SYSTEM_STATS (
 
 /*** FIXED OBJECT STATS ***/
 
+-- my queries
+set lines 150 pages 200
+col "CT" format 999,990
+col "STATUS" format a30
+select
+	case
+		when last_analyzed is null then 'Never analyzed'
+		else 'Analyzed '||to_char(last_analyzed,'MM/DD/YYYY')
+	end "STATUS"
+	, count(*) "CT"
+from DBA_TAB_STATISTICS
+where object_type='FIXED TABLE'
+group by case when last_analyzed is null then 'Never analyzed' else 'Analyzed '||to_char(last_analyzed,'MM/DD/YYYY') end
+order by "STATUS";
+
+select con_id,
+	case
+		when last_analyzed is null then 'Never analyzed'
+		else 'Analyzed '||to_char(last_analyzed,'MM/DD/YYYY')
+	end "STATUS"
+	, count(*) "CT"
+from CDB_TAB_STATISTICS
+where object_type='FIXED TABLE'
+group by con_id, case when last_analyzed is null then 'Never analyzed' else 'Analyzed '||to_char(last_analyzed,'MM/DD/YYYY') end
+order by con_id, "STATUS";
+
+-- Oracle queries (Doc ID 1474937.1)
+set lines 150 pages 200
+col last_analyzed for a13
+select NVL(TO_CHAR(last_analyzed, 'YYYY-Mon-DD'), 'NO STATS') last_analyzed, COUNT(*) fixed_objects
+FROM dba_tab_statistics
+WHERE object_type = 'FIXED TABLE'
+GROUP BY TO_CHAR(last_analyzed, 'YYYY-Mon-DD')
+ORDER BY 1 DESC;
+
+break on con_id;
+select con_id, NVL(TO_CHAR(last_analyzed, 'YYYY-Mon-DD'), 'NO STATS') last_analyzed, COUNT(*) fixed_objects
+FROM cdb_tab_statistics
+WHERE object_type = 'FIXED TABLE' and con_id!=2
+GROUP BY con_id, TO_CHAR(last_analyzed, 'YYYY-Mon-DD')
+ORDER BY 1 ASC, 2 DESC;
+
+-- gather stats
 DBMS_STATS.GATHER_FIXED_OBJECTS_STATS (
    stattab        VARCHAR2 DEFAULT NULL,
    statid         VARCHAR2 DEFAULT NULL,

@@ -127,6 +127,11 @@ SELECT extract(day from snap_interval) *24*60+extract(hour from snap_interval) *
 	extract(day from retention) *24*60+extract(hour from retention) *60+extract(minute from retention) retention_Interval
 FROM dba_hist_wr_control;
 
+SELECT db.name, extract(hour from wr.snap_interval) *60 + extract(minute from wr.snap_interval) "Interval (min)",
+	extract(day from wr.retention) "Retention Days"
+FROM dba_hist_wr_control wr, v$database db
+where wr.dbid=db.dbid;
+
 
 /*--- DBMS_WORKLOAD_REPOSITORY ---*/
   
@@ -134,7 +139,7 @@ FROM dba_hist_wr_control;
 EXEC dbms_workload_repository.create_snapshot;
 
 -- set AWR retention policy retention and snapshot interval (in minutes)
-exec DBMS_WORKLOAD_REPOSITORY.MODIFY_SNAPSHOT_SETTINGS(132480,60);
+exec DBMS_WORKLOAD_REPOSITORY.MODIFY_SNAPSHOT_SETTINGS(44640,60);
 
 
 -- ########
@@ -541,6 +546,13 @@ col name format a40
 select name, to_char(created,'MM/DD/RR') "CREATED", to_char(last_modified,'MM/DD/RR') "MODIFIED", type, status, force_matching
 from DBA_SQL_PROFILES
 order by created;
+
+col sql_profile_name format a40
+select distinct s.sql_id, p.name sql_profile_name
+from dba_sql_profiles p, DBA_HIST_SQLSTAT s
+where p.name=s.sql_profile
+and s.sql_id='&what_sql'
+order by 1;
 
 
 -- 1. Create a staging table

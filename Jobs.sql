@@ -12,7 +12,7 @@ USER_SCHEDULER_SCHEDULES
 -- get schedule jobs showing inline & out-of-line actions
 set lines 150 pages 1000
 alter session set nls_timestamp_format='DD-MON-RR HH24:MI';
-col job_name format a25
+col job_name format a30
 col state format a10
 col "LAST" format a15
 col "NEXT" format a15
@@ -22,7 +22,8 @@ select sj.job_name, to_char(sj.last_start_date,'DD-MON-RR HH24:MI') "LAST", sj.f
 to_char(sj.next_run_date,'DD-MON-RR HH24:MI') "NEXT", sj.state, NVL2(sj.job_action, sj.job_action, sp.program_action) "ACTION"
 from dba_scheduler_jobs sj left outer join DBA_SCHEDULER_PROGRAMS sp
   on sj.program_name=sp.program_name
---where sj.owner not in ('SYS','APEX_040000','ORACLE_OCM')
+where sj.state!='DISABLED'
+--and sj.owner not in ('SYS','APEX_040000','ORACLE_OCM')
 order by last_start_date, next_run_date;
 
 -- get jobs & their schedules
@@ -100,7 +101,21 @@ from dba_scheduler_jobs where job_name='GET_TS_SIZES_JOB';
 
 /*-- Automated Maintenance Tasks --*/
 
+DBA_AUTOTASK_CLIENT_HISTORY
+DBA_AUTOTASK_CLIENT
+DBA_AUTOTASK_WINDOW_HISTORY
+DBA_AUTOTASK_WINDOW_CLIENTS
+DBA_AUTOTASK_STATUS
+DBA_AUTOTASK_JOB_HISTORY
+DBA_AUTOTASK_TASK
+DBA_AUTOTASK_SCHEDULE
 DBA_AUTOTASK_CLIENT_JOB
+DBA_AUTOTASK_OPERATION
+
+ORA$AT_SA_SPC_SY_nnn -- Space advisor tasks
+ORA$AT_OS_OPT_SY_nnn -- Optimiser stats collection tasks
+ORA$AT_SQ_SQL_SW_nnn -- Space advisor tasks
+
 
 -- check status of automated tasks
 set lines 150 pages 200
@@ -135,6 +150,59 @@ from DBA_AUTOTASK_WINDOW_CLIENTS win,
 where win.WINDOW_NAME=sch.WINDOW_NAME and win.WINDOW_NAME in ('WEDNESDAY_WINDOW','THURSDAY_WINDOW','FRIDAY_WINDOW','MONDAY_WINDOW','TUESDAY_WINDOW')
 order by WINDOW_NEXT_TIME;
 
+-- CDB: get status of all jobs for each window
+set lines 150 pages 200
+col WINDOW_NAME format a20
+select win.CON_ID, win.WINDOW_NAME, to_char(win.WINDOW_NEXT_TIME,'MM/DD HHpm') "NEXT", 
+	EXTRACT(HOUR FROM sch.DURATION) * 60 + EXTRACT(MINUTE FROM sch.DURATION) "MINUTES",
+	win.AUTOTASK_STATUS "STATUS", win.SEGMENT_ADVISOR "SEG_ADV", win.OPTIMIZER_STATS "OPT", win.SQL_TUNE_ADVISOR "SQL_TUNE"
+from CDB_AUTOTASK_WINDOW_CLIENTS win, 
+	(select CON_ID, WINDOW_NAME, DURATION, min(START_TIME) from CDB_AUTOTASK_SCHEDULE group by CON_ID, WINDOW_NAME, DURATION) sch
+where win.WINDOW_NAME=sch.WINDOW_NAME and win.CON_ID=sch.CON_ID
+order by win.CON_ID, win.WINDOW_NEXT_TIME;
+
+-- CDB: get summary of all jobs
+set lines 150 pages 200
+select win.CON_ID, win.AUTOTASK_STATUS "STATUS", 
+	sum(case win.SEGMENT_ADVISOR 
+		when 'ENABLED' then 1
+		else 0 end) "SEG_ADV",
+	sum(case win.OPTIMIZER_STATS 
+		when 'ENABLED' then 1
+		else 0 end) "OPT",
+	sum(case win.SQL_TUNE_ADVISOR 
+		when 'ENABLED' then 1
+		else 0 end) "SQL_TUNE"
+from CDB_AUTOTASK_WINDOW_CLIENTS win, 
+	(select CON_ID, WINDOW_NAME, DURATION, min(START_TIME) from CDB_AUTOTASK_SCHEDULE group by CON_ID, WINDOW_NAME, DURATION) sch
+where win.WINDOW_NAME=sch.WINDOW_NAME and win.CON_ID=sch.CON_ID
+group by win.CON_ID, win.AUTOTASK_STATUS
+order by win.CON_ID, win.AUTOTASK_STATUS;
+
+-- total sum of enabled jobs
+set lines 150 pages 200
+select CON_ID, "STATUS",
+	("SEG_ADV" + "OPT" + "SQL_TUNE") "TOTAL"
+from (
+	select win.CON_ID, win.AUTOTASK_STATUS "STATUS", 
+		sum(case win.SEGMENT_ADVISOR 
+			when 'ENABLED' then 1
+			else 0 end) "SEG_ADV",
+		sum(case win.OPTIMIZER_STATS 
+			when 'ENABLED' then 1
+			else 0 end) "OPT",
+		sum(case win.SQL_TUNE_ADVISOR 
+			when 'ENABLED' then 1
+			else 0 end) "SQL_TUNE"
+	from CDB_AUTOTASK_WINDOW_CLIENTS win, 
+		(select CON_ID, WINDOW_NAME, DURATION, min(START_TIME) from CDB_AUTOTASK_SCHEDULE group by CON_ID, WINDOW_NAME, DURATION) sch
+	where win.WINDOW_NAME=sch.WINDOW_NAME and win.CON_ID=sch.CON_ID
+	group by win.CON_ID, win.AUTOTASK_STATUS
+)
+where ("SEG_ADV" + "OPT" + "SQL_TUNE") > 0 and "STATUS"='ENABLED'
+order by 1,2;
+
+
 -- check history of tasks in time period
 col client_name format a40
 col job_status format a20
@@ -144,7 +212,6 @@ from DBA_AUTOTASK_JOB_HISTORY
 where job_start_time between to_date('&what_start','MMDDYY HH24MI') and to_date('&what_end','MMDDYY HH24MI')
 order by client_name, job_start_time;
 
-DBA_AUTOTASK_CLIENT_HISTORY
 
 -- disable auto job
 DBMS_AUTO_TASK_ADMIN.DISABLE (
@@ -166,6 +233,77 @@ DBMS_AUTO_TASK_ADMIN.ENABLE (
    window_name       IN    VARCHAR2);
 
 exec DBMS_AUTO_TASK_ADMIN.ENABLE ('auto optimizer stats collection','auto optimizer stats job',NULL);
+
+
+-- maintenance windows
+col WINDOW_NAME format a20
+col REPEAT_INTERVAL format a70
+SELECT WINDOW_NAME, ENABLED, ACTIVE, EXTRACT(HOUR FROM DURATION) * 60 + EXTRACT(MINUTE FROM DURATION) "MINUTES", REPEAT_INTERVAL 
+FROM DBA_SCHEDULER_WINDOWS order by NEXT_START_DATE;
+
+BEGIN
+   DBMS_SCHEDULER.CREATE_WINDOW (
+     window_name      => 'daytime',
+     resource_plan    => 'mixed_workload_plan',
+     start_date       => '28-APR-09 08.00.00 AM',
+     repeat_interval  => 'freq=daily; byday=mon,tue,wed,thu,fri',
+     duration         => interval '9' hour,
+     window_priority  => 'low',
+     comments         => 'OLTP transactions have priority');
+END;
+/
+
+BEGIN
+  DBMS_SCHEDULER.DISABLE ('sys.window1, sys.window2, 
+   sys.window3, sys.windowgroup1, sys.windowgroup2');
+END;
+/
+
+BEGIN
+  DBMS_SCHEDULER.ENABLE ('sys.window1, sys.window2, sys.window3');
+END;
+/
+
+
+-- maintenance window groups
+SELECT group_name, enabled, number_of_members FROM dba_scheduler_groups
+  WHERE group_type = 'WINDOW';
+
+SELECT group_name, member_name FROM dba_scheduler_group_members;
+
+BEGIN
+  DBMS_SCHEDULER.CREATE_GROUP (
+   group_name   =>  'downtime',
+   group_type   =>  'WINDOW',
+   member       =>  'weeknights, weekends');
+END;
+/
+
+BEGIN
+DBMS_SCHEDULER.DROP_GROUP('sys.windowgroup1, sys.windowgroup2, sys.windowgroup3');
+END;
+/
+
+BEGIN
+  DBMS_SCHEDULER.ADD_GROUP_MEMBER ('sys.windowgroup1','window2, window3');
+END;
+/
+
+BEGIN
+  DBMS_SCHEDULER.REMOVE_GROUP_MEMBER('sys.window_group1', 'window2, window3');
+END;
+/
+
+BEGIN
+  DBMS_SCHEDULER.ENABLE('sys.windowgroup1, sys.windowgroup2, sys.windowgroup3');
+END;
+/
+
+BEGIN
+  DBMS_SCHEDULER.DISABLE('sys.windowgroup1, sys.windowgroup2, sys.windowgroup3');
+END;
+/
+
 
 /*-- 10g Job Queries--*/
 -- get list of all DB jobs
