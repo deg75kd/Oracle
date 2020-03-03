@@ -71,6 +71,86 @@ FROM   v$xml_audit_trail WHERE  object_schema = '&aud_obj_owner'
 ORDER BY extended_timestamp;
 
 
+-- ####################
+-- # AUDIT MANAGEMENT #
+-- ####################
+
+-- clean (delete records from) audit trail
+DBMS_AUDIT_MGMT.CLEAN_AUDIT_TRAIL(
+   audit_trail_type         IN PLS_INTEGER,
+   use_last_arch_timestamp  IN BOOLEAN DEFAULT TRUE,
+   container                IN PLS_INTEGER DEFAULT CONTAINER_CURRENT,
+   database_id              IN NUMBER DEFAULT NULL,
+   container_guid           IN VARCHAR2 DEFAULT NULL);
+
+/*
+audit_trail_type	AUDIT_TRAIL_ALL - all types
+					AUDIT_TRAIL_AUD_STD - records in SYS.AUD$
+					AUDIT_TRAIL_OS - OS audit trail
+*/
+
+
+/*@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ clean up @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ */
+
+-- idwd - lxoradwsd02
+sho parameter audit
+NAME                                 TYPE        VALUE
+------------------------------------ ----------- ------------------------------
+audit_file_dest                      string      /database/cidwd_admn01/admin/a
+                                                 udit/
+audit_sys_operations                 boolean     TRUE
+audit_syslog_level                   string
+audit_trail                          string      DB
+unified_audit_sga_queue_size         integer     1048576
+
+select count(*) from aud$;
+51
+
+alter session set container=idwd;
+select count(*) from aud$;
+25,909,203
+
+set lines 150 pages 200
+col "Table" format a50
+col tablespace_name format a20
+col "GB" format 999,999,999
+SELECT	t.owner||'.'||t.table_name AS "Table", t.tablespace_name, s.segment_type, round(s.bytes/1024/1024/1024,0) "GB"
+FROM	dba_segments s, dba_tables t
+WHERE	s.segment_type like 'TABLE%' AND s.segment_name=t.table_name AND t.table_name='AUD$'
+ORDER BY t.owner, t.table_name, s.segment_type;
+Table                                              TABLESPACE_NAME      SEGMENT_TYPE                 GB
+-------------------------------------------------- -------------------- ------------------ ------------
+SYS.AUD$                                           SYSTEM               TABLE                         4
+
+col file_id format 990
+col file_name format a75
+col "MB" format 9,999,990
+col "MaxMB" format 9,999,990
+break on report;
+compute sum label "TOTAL" of "MB" "MaxMB" on REPORT;
+select file_id, file_name, (bytes/1024/1024) "MB", 
+(decode(maxbytes,0,bytes,maxbytes)/1024/1024) "MaxMB", autoextensible
+from dba_data_files
+where tablespace_name=upper('SYSTEM') 
+order by file_name;
+FILE_ID FILE_NAME                                                                           MB      MaxMB AUT
+------- --------------------------------------------------------------------------- ---------- ---------- ---
+     18 /database/idwd01/oradata/system01.dbf                                            5,150     32,768 YES
+
+truncate table sys.aud$;
+select count(*) from aud$;
+0
+
+Table                                              TABLESPACE_NAME      SEGMENT_TYPE                 GB
+-------------------------------------------------- -------------------- ------------------ ------------
+SYS.AUD$                                           SYSTEM               TABLE                         0
+
+ALTER SYSTEM SET audit_trail = 'NONE' SCOPE=both;
+ORA-02095: specified initialization parameter cannot be modified
+
+ALTER SYSTEM SET audit_trail = 'NONE' SCOPE=spfile;
+
+
 -- #########################
 -- # FINE-GRAINED AUDITING #
 -- #########################

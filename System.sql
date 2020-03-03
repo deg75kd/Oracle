@@ -90,8 +90,6 @@ select name, open_mode from v$pdbs;
 -- Determining Whether a Database is a CDB
 SELECT CDB FROM V$DATABASE;
 
-
-
 /*----------------- CONNECTIONS -----------------*/
 
 -- connect to CDB
@@ -139,7 +137,6 @@ ALTER PLUGGABLE DATABASE pdb1 SAVE STATE;
 -- dro pPDB
 DROP PLUGGABLE DATABASE &what_pdb INCLUDING DATAFILES;
 
-
 /*----------------- CHANGES -----------------*/
 -- must be connected to CDB
 -- these tasks can also be accomplished with standard ALTER DATABASE when connected to PDB
@@ -169,8 +166,6 @@ alter session set exclude_seed_cdb_view=TRUE;
 alter system set exclude_seed_cdb_view=FALSE scope=both;
 alter session set exclude_seed_cdb_view=FALSE;
 
-
-
 /*----------------- CHANGE ROOT -----------------*/
 
 alter session set container=pdb$seed;
@@ -182,15 +177,51 @@ shut immediate
 startup open read only
 alter session set "_oracle_script"=false;
 
-
-
 select pdb_name, status
 from cdb_pdbs;
+
+/*----------------- create PDB -----------------*/
+
+CREATE PLUGGABLE DATABASE testdbs
+ADMIN USER PDBADMIN IDENTIFIED BY oracle ROLES=(CONNECT)  
+  file_name_convert=(
+    '/database/ctestdbs_temp01/oradata/pdbseed','/database/testdbs_temp01/oradata',
+	'/database/ctestdbs_undo01/oradata/pdbseed','/database/testdbs_undo01/oradata',
+    '/database/ctestdbs01/oradata/pdbseed','/database/testdbs01/oradata'
+  );
+	
+alter pluggable database &whatPDB open;
+alter system register;
+alter pluggable database &whatPDB save state;
+
+CREATE PLUGGABLE DATABASE $vPDBName
+ADMIN USER PDBADMIN IDENTIFIED BY oracle ROLES=(CONNECT)  
+  file_name_convert=(
+    '${vTempMt}/oradata/pdbseed','${vPDBTempMt}/oradata',
+	'${vUndoMt}/oradata/pdbseed','${vPDBUndoMt}/oradata',
+    '${vCDBFileMt}/oradata/pdbseed','${vPDBFileMt}/oradata'
+  );
+
 
 
 -- #############################
 -- # INITIALIZATION PARAMETERS #
 -- #############################
+
+-- maxdatafiles (db_files can never exceed this)
+-- to change must create new control files
+select records_total from v$controlfile_record_section where type = 'DATAFILE';
+
+Why would one set MAXDATAFILES to anything less than the port-specific maximum?    
+   
+    Increasing the value of MAXDATAFILES increases the size of the    
+    CONTROL FILE.    
+    
+Why would one set DB_FILES to anything less than MAXDATAFILES?    
+   
+    Increasing the value of DB_FILES increases the size of the PGA, or    
+    Program Global Area, which is allocated for every user process    
+    connected to ORACLE. 
 
 /*----------------- QUERIES -----------------*/
 -- name of spfile
@@ -226,8 +257,21 @@ col "SPFILE" format a50
 select coalesce(init.name,sp.name) "NAME", init.display_value "VALUE", sp.display_value "SPFILE"
 from v$parameter init, v$spparameter sp
 where init.name=sp.name
-and lower(init.display_value) not like '%edma%'
+and init.name='large_pool_size'
+--and lower(init.display_value) not like '%edma%'
 order by 1;
+
+-- get location of init file based on spfile
+select substr(pm.value,1,instr(pm.value,'spfile')-1)||'init'||lower(db.name)||'.ora'
+from v$parameter pm, v$database db
+where pm.name='spfile';
+
+-- backup spfile to init file
+column filename new_val filename
+select substr(pm.value,1,instr(pm.value,'spfile')-1)||'init'||lower(db.name)||'_'||to_char(sysdate,'YYYYMMDD')||'.ora' filename
+from v$parameter pm, v$database db
+where pm.name='spfile';
+CREATE PFILE='&filename' FROM SPFILE;
 
 -- parameter values in effect for the instance (use in a PDB)
 col name format a30
@@ -454,7 +498,7 @@ from registry$history order by action_time desc;
 set lines 120 pages 200
 col comp_name format a40
 col status format a15
-select comp_name,status,version from dba_registry;
+select comp_name,status,version from dba_registry order by 1;
 
 -- see options
 col PARAMETER format a40
@@ -465,6 +509,19 @@ select fus.name, ins.version, fus.currently_used
 from dba_feature_usage_statistics fus, v$instance ins
 where fus.version=ins.version
 order by 1;
+
+-- common installed components
+col parameter format a40
+col value format a12
+select * from v$option 
+where parameter in ('Java','Oracle Database Vault','Oracle Label Security','OLAP','Spatial')
+order by parameter;
+
+-- Oracle JVM
+select * from all_registry_banners;
+
+-- Oracle APEX
+SELECT username FROM dba_users WHERE username LIKE 'FLOWS_%' or username like 'APEX%';
 
 -- check if diagnostic and tuning pack enabled
 select name, value
@@ -522,6 +579,9 @@ New password:
 Retype new password:
 Password changed
 SQL> quit
+
+
+$ORACLE_HOME/bin/orapwd file="${vPfileLoc}/orapw${vCDBName}" password=$vSysPwd force=y format=12
 
 
 -- ##########################

@@ -1,0 +1,108 @@
+------------------------------------------------------------------ 
+*.db_files = 300 
+------------------------------------------------------------------ 
+This parameter specifies the maximum number of database files 
+that can be opened for this database. Changing this parameter value requires 
+restart of the database. Considering that, this value should be larger than 
+the number of data files in the database, so that new data files can be added 
+to the database any time. 
+
+Q: Is there a downside to setting this at a higher level so we don't hit it? 
+A: Yes, there may be a downside. If you set this parameter too large, 
+extra memory may be consumed in the PGA. 
+MAXDATAFILES and DB_FILES Parameters ( Doc ID 119507.1 ) 
+
+------------------------------------------------------------------ 
+*.open_cursors = 5000 
+------------------------------------------------------------------ 
+This parameter sets the maximum number of open cursors (handles to private SQL areas) 
+a session can have at once. You can use this parameter to prevent a session from 
+opening an excessive number of cursors. I feel 5000 may be a bit too big, unless 
+there is a session which actually opens 5000 cursors, but it's still okay to use that value. 
+
+Q: How can I check how many cursors we're using to set this at a more reasonable level? 
+A: You can query v$sesstat to find out the current usage of cursors. 
+Please check following document to find out how to run the query and tune open_cursors. 
+How to Monitor and tune Open and Cached Cursors ( Doc ID 1430255.1 ) 
+
+------------------------------------------------------------------ 
+*.optimizer_adaptive_plans=TRUE 
+*.optimizer_adaptive_statistics=FALSE 
+------------------------------------------------------------------ 
+The adaptive features controlled by parameter "optimizer_adaptive_features" are split 
+into these two parameters, and the old parameter "optimizer_adaptive_features" has been 
+made obsolete. 
+On release 12.1, these parameters can be used on 12.1.0.2 October 2017 Proactive BP 
+and later. 
+
+For details on how to use these parameters, please read these 2 documents: 
+Bug 22652097 - provide separate controls for adaptive plans and adaptive statistics features ( Doc ID 22652097.8 ) 
+Adaptive Features changes in 12.1.0.2 October 2017 Proactive Bundle Patch and later ( Doc ID 2312911.1 ) 
+
+
+------------------------------------------------------------------ 
+*.optimizer_capture_sql_plan_baselines=TRUE 
+*.optimizer_use_sql_plan_baselines=TRUE 
+------------------------------------------------------------------ 
+These parameters are used to capture and to use SQL Plan Baseline. 
+Generally, "optimizer_capture_sql_plan_baselines" is set to TRUE only while 
+attempting to capture the plan baseline of a certain query, and should be set to 
+FALSE all other times. "optimizer_use_sql_plan_baselines" can be set to TRUE 
+whenever SQL Plan Baseline is to be used. 
+
+
+------------------------------------------------------------------ 
+*.parallel_max_servers = 8 
+*.parallel_min_servers = 8 
+------------------------------------------------------------------ 
+These parameters specify the maximum and minimum number of parallel query or 
+parallel recovery processes for an instance. Setting both of these values to 8 
+will keep 8 parallel slave processes for the instance. 
+Setting parallel_max_servers=8 may affect parallel query performance, if 
+several parallel queries were requested from many sessions at the same time. 
+
+Q: I know that SQL statements can be downgraded if there aren't enough parallel servers available. 
+Is there a way to check how often that's happening? 
+
+A: Parallel query downgrade may be referenced by querying GV$SQL_PLAN_MONITOR, 
+or by setting "px trace". Please check following document for the procedure: 
+How to View Why the Degree Of Parallelism (DOP) was Downgraded for an SQL in 12c ( Doc ID 2011375.1 ) 
+
+------------------------------------------------------------------ 
+*.pga_aggregate_limit = 0 
+------------------------------------------------------------------ 
+This parameter sets a limit on the aggregate PGA memory consumed by the instance. 
+Setting this to 0 means that PGA usage will not be limited by parameters. 
+Users may choose to set 0 for this parameter when they don't wish the sessions to 
+fail unexpectedly due to PGA limit. Otherwise, it is advisable to set this to 
+an adequate value, so that some session may not unexpectedly use large memory. 
+
+Q: Is there any change in 12c or 19c that affects how PGA is used? 
+That will help us decide on the setting of this parameter.
+
+A: 	PGA usage varies between environment, depending on versions, feature usage, parameter values. 
+Following is general advice on how to use this parameter. 
+Limiting process size with database parameter PGA_AGGREGATE_LIMIT ( Doc ID 1520324.1 ) 
+
+------------------------------------------------------------------ 
+*.undo_retention=14400 
+------------------------------------------------------------------ 
+This parameter specifies how many seconds the undo data should be retained. 
+This value should be larger than the longest running query, so that the 
+query will not fail with ORA-1555. Also, if you are using flashback, 
+the setting of this parameter should account for any flashback requirements 
+of the system. 
+In this case, value 14400 seconds means 240 minutes, which is 4 hours. 
+If the longest running query in your env is 4 hours, then this value is 
+long enough for that query to complete. If this value causes problems, 
+such as undo tablespace growing, then it may need to be decreased. 
+
+Q: We generally have fixed sized UNDO tablespaces in our DBs. 
+I read somewhere that this parameter is mostly ignored in those cases. 
+Do you have best practices on UNDO that I can reference? 
+
+A: You are right. For fixed- size undo tablespaces, the system automatically tunes for 
+the maximum possible undo retention period, based on undo tablespace size and usage history, 
+and ignores UNDO_RETENTION unless retention guarantee is enabled. 
+Please check following document, which is a good reference on automatic undo management. 
+FAQ – Automatic Undo Management (AUM) / System Managed Undo (SMU) ( Doc ID 461480.1 ) 
