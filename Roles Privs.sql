@@ -9,7 +9,7 @@ select * from user_role_privs;
 
 -- find obj privs for user/role (grantee)
 -- or use tiered query at bottom
-set lines 150 pages 50
+set lines 150 pages 200
 col "PRIVILGE" format a80
 select privilege||' on '||owner||'.'||table_name "PRIVILEGE"
 from dba_tab_privs

@@ -1,4 +1,7 @@
 set lines 150 pages 200
+col USERNAME format a30
+col GRANTED_ROLE format a30
+col PRIVILEGE format a50
 with privs (grantee
            ,granted_role
            ,lvl
