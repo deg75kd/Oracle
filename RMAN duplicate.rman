@@ -1,0 +1,170 @@
+-- ##################
+-- # RMAN Duplicate #
+-- ##################
+
+/* NOTES
+1.	Principal work of the duplication is performed by the auxiliary channels
+2.	Must perform database point-in-time recovery, because the online redo log files in the source database are not backed up and cannot be applied to the duplicate database
+	The farthest point of recovery of the duplicate database is the most recent redo log file archived by the source database
+3.	The auxiliary instance must be available through Oracle Net Services if any of the following conditions is true: 
+	•The RMAN client is run from a host other than the destination host (false)
+	•The duplication technique chosen is active database duplication (maybe)
+	•The destination host is different from the source host (true)
+
+***************************************** Duplicate Options *****************************************
+
+The auxiliary instance must be available through Oracle Net Services if any of the following conditions is true: 
+•The RMAN client is run from a host other than the destination host (false)
+•The duplication technique chosen is active database duplication (maybe)
+•The destination host is different from the source host (true)
+
+Active database duplication
+- requires Oracle Net Services for aux instance
+- try lsnrctl reload
+
+Backup-Based Duplication with a Target Connection
+- destination host must have access to the RMAN backups 
+- requires Oracle Net Services for aux instance
+
+Backup-Based Duplication Without a Target Connection With Recovery Catalog Connection
+- requires Oracle Net Services for aux instance
+- destination host must have access to the RMAN backups 
+	- access over network?
+	- make Rubrik mount available
+
+Backup-Based Duplication Without a Target Database or Recovery Catalog Connection
+- does NOT require Oracle Net Services for aux instance
+- disk backup location containing all the backups or copies required for duplication must be available to the destination host
+	- copy files to local directory (maybe to PDB mount since it'll be empty until handed off to app team)
+
+*/
+
+-- ************************* Backup-Based Duplication *************************
+
+/* NOTES
+1.	If the source database backups exist, and if the effect on the network is unacceptable, then backup-based duplication may be a better option.
+	You can copy backups to temporary storage and transfer them manually to the destination host.
+2.	If a recovery catalog exists, then you can perform backup-based duplication without connecting RMAN as TARGET to the source database. 
+3.	When you use a backup location, the backups and copies can reside in a shared location or can be moved to the location on the destination host.
+4.	When you are not using a backup location, your strategy depends on •Different file systems for source and destination hosts
+	•You can use shared disk to make backups available
+	•You cannot use shared disk to make backups available. Describes this technique -> https://docs.oracle.com/en/database/oracle/oracle-database/12.2/bradv/rman-duplicating-databases-advanced.html#GUID-C575132F-23DE-47E5-8FFD-01F986F6CD13
+
+*/
+
+-- ************ w/o Target Connection ************
+-- ******* w/o Recovery Catalog *******
+
+rman
+CONNECT AUXILIARY /
+RUN
+{
+  ALLOCATE AUXILIARY CHANNEL c1 DEVICE TYPE DISK;
+  ALLOCATE AUXILIARY CHANNEL c2 DEVICE TYPE DISK;
+  ALLOCATE AUXILIARY CHANNEL c3 DEVICE TYPE DISK;
+  SET NEWNAME FOR DATAFILE 1  TO '${vCDBFileDir}/oradata/system01.dbf'; 
+  SET NEWNAME FOR DATAFILE 3  TO '${vCDBFileDir}/oradata/sysaux01.dbf';
+  SET NEWNAME FOR DATAFILE 6  TO '${vCDBFileDir}/oradata/users01.dbf';
+  SET NEWNAME FOR DATAFILE 5  TO '${vCDBFileDir}/oradata/undo.dbf';
+  SET NEWNAME FOR DATAFILE 7  TO '${vCDBFileDir}/oradata/tools01.dbf';
+  SET NEWNAME FOR DATAFILE 8  TO '${vCDBFileDir}/oradata/LOGON_AUDIT_DATA_01.dbf';
+  SET NEWNAME FOR TEMPFILE 1  TO '${vCDBFileDir}/oradata/temp01.dbf'; 
+  SET NEWNAME FOR DATAFILE 2  TO '${vCDBFileDir}/oradata/pdbseed/system01.dbf';
+  SET NEWNAME FOR DATAFILE 4  TO '${vCDBFileDir}/oradata/pdbseed/sysaux01.dbf';
+  SET NEWNAME FOR DATAFILE 10 TO '${vCDBFileDir}/oradata/pdbseed/users01.dbf';
+  SET NEWNAME FOR DATAFILE 9  TO '${vCDBFileDir}/oradata/pdbseed/tools01.dbf';
+  SET NEWNAME FOR TEMPFILE 2  TO '${vCDBFileDir}/oradata/pdbseed/temp01.dbf'; 
+  DUPLICATE DATABASE $vGCSID TO $vCDBName
+  BACKUP LOCATION '${vBkpLoc}/${vGCSID}'
+    LOGFILE
+      GROUP 1 ('${vRedoDir1}/oralog/redo101.log', 
+               '${vRedoDir2}/oralog/redo102.log') SIZE $vRedoSize REUSE, 
+      GROUP 2 ('${vRedoDir1}/oralog/redo201.log', 
+               '${vRedoDir2}/oralog/redo202.log') SIZE $vRedoSize REUSE,
+      GROUP 3 ('${vRedoDir1}/oralog/redo301.log', 
+               '${vRedoDir2}/oralog/redo302.log') SIZE $vRedoSize REUSE
+  SPFILE
+    set audit_file_dest='${vAdmnDir}/admin/audit/'
+    set control_files='${vRedoDir2}/oractl/control02.ctl','${vRedoDir1}/oractl/control01.ctl'
+    set diagnostic_dest='${vAdmnDir}/admin/'
+    set log_archive_dest_1='LOCATION=${vArchDir}/arch'
+    set utl_file_dir='${vAdmnDir}/admin/utldump/'
+  NOREDO;
+}
+
+/* ************ w/o Target Connection ************
+-- ******* with Recovery Catalog *******
+
+*/
+
+/* ************ with Target Connection ************
+
+Advantageous where network connections from the auxiliary host to the source database are restricted or prone to intermittent disruptions
+*/
+
+/* ************************* Active Database Duplication *************************
+
+Oracle recommends that you use active database duplication in general, unless network bandwidth between the source host and the destination host is a constraint. 
+Active database duplication requires minimal setup and is simpler to perform.
+
+Does not require source database backups
+Disadvantages:
+	- negative performance effect on the network
+	- processes required to transfer the files to the auxiliary host affect the source database 
+If the source database is open, then archiving must be enabled
+
+RMAN uses backup sets to perform active database duplication when the connection to the target database is established using a net service name and any one of the following conditions is satisfied: 
+	•The DUPLICATE ... FROM ACTIVE DATABASE command contains either the USING BACKUPSET, USING COMPRESSED BACKUPSET, or SECTION SIZE clause. 
+	•The number of auxiliary channels allocated is equal to or greater than the number of target channels allocated.
+
+
+*/
+
+sqlplus / as sysdba
+STARTUP NOMOUNT PFILE='/app/oracle/product/db/12c/2/dbs/initctestdbs.ora';
+
+-- had to add aux db to listener.ora or showing blocked
+rman
+CONNECT TARGET SYS/This1Works@v122b8d
+CONNECT AUXILIARY SYS/This1Works@ctestdbs
+
+RUN
+{
+  ALLOCATE CHANNEL c1 DEVICE TYPE DISK;
+  ALLOCATE CHANNEL c2 DEVICE TYPE DISK;
+  ALLOCATE AUXILIARY CHANNEL c3 DEVICE TYPE DISK;
+  ALLOCATE AUXILIARY CHANNEL c4 DEVICE TYPE DISK;
+  SET NEWNAME FOR DATAFILE 1  TO '/database/ctestdbs01/oradata/system01.dbf'; 
+  SET NEWNAME FOR DATAFILE 3  TO '/database/ctestdbs01/oradata/sysaux01.dbf';
+  SET NEWNAME FOR DATAFILE 7  TO '/database/ctestdbs01/oradata/users01.dbf';
+  SET NEWNAME FOR DATAFILE 13 TO '/database/ctestdbs01/oradata/undo01.dbf';
+  SET NEWNAME FOR DATAFILE 15 TO '/database/ctestdbs01/oradata/tools01.dbf';
+  SET NEWNAME FOR DATAFILE 16 TO '/database/ctestdbs01/oradata/logon_audit_data01.dbf';
+  SET NEWNAME FOR TEMPFILE 1  TO '/database/ctestdbs01/oradata/temp01.dbf'; 
+  SET NEWNAME FOR DATAFILE 5  TO '/database/ctestdbs01/oradata/pdbseed/system01.dbf';
+  SET NEWNAME FOR DATAFILE 6  TO '/database/ctestdbs01/oradata/pdbseed/sysaux01.dbf';
+  SET NEWNAME FOR DATAFILE 14 TO '/database/ctestdbs01/oradata/pdbseed/undo01.dbf';
+  SET NEWNAME FOR DATAFILE 17 TO '/database/ctestdbs01/oradata/pdbseed/tools01.dbf';
+  SET NEWNAME FOR DATAFILE 18 TO '/database/ctestdbs01/oradata/pdbseed/logon_audit_data01.dbf';
+  SET NEWNAME FOR DATAFILE 19 TO '/database/ctestdbs01/oradata/pdbseed/users01.dbf';
+  SET NEWNAME FOR TEMPFILE 2  TO '/database/ctestdbs01/oradata/pdbseed/temp01.dbf'; 
+  
+  DUPLICATE TARGET DATABASE TO ctestdbs
+    FROM ACTIVE DATABASE
+	PASSWORD FILE 
+    LOGFILE
+      GROUP 1 ('/database/ctestdbs_redo01/oralog/redo101.log', 
+               '/database/ctestdbs_redo02/oralog/redo102.log') SIZE 512M REUSE, 
+      GROUP 2 ('/database/ctestdbs_redo01/oralog/redo201.log', 
+               '/database/ctestdbs_redo02/oralog/redo202.log') SIZE 512M REUSE,
+      GROUP 3 ('/database/ctestdbs_redo01/oralog/redo301.log', 
+               '/database/ctestdbs_redo02/oralog/redo302.log') SIZE 512M REUSE
+    SPFILE
+      set audit_file_dest='/database/ctestdbs_admn01/admin/audit'
+      set control_files='/database/ctestdbs_redo02/oractl/control02.ctl','/database/ctestdbs_redo01/oractl/control01.ctl'
+      set diagnostic_dest='/database/ctestdbs_admn01/admin'
+      set log_archive_dest_1='LOCATION=/database/ctestdbs_arch01/arch/'
+    ;
+}
+
+

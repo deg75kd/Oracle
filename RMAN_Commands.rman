@@ -118,6 +118,11 @@ list archivelog all;
 -- list backup of control files
 list backup of controlfile;
 
+LIST 
+[BACKUP [OF [CONTROLFILE | DATABASE [ROOT] | PLUGGABLE DATABASE pdb_name | DATAFILE datafileSpec | TABLESPACE [pdb_name:]tablespace_name]] [BY FILE | SUMMARY]] [maintQualifier]
+[BACKUPSET primaryKey | BACKUPPIECE [media_handle | primaryKey | TAG tag_name] | CONTROLFILECOPY ... | DATAFILECOPY ...]
+
+
 -- recoverable
 -- Restricts the list to expired data file backups or copies whose status in the repository is AVAILABLE and which can be used for restore and recovery in the current incarnation of the target database
 LIST COPY RECOVERABLE;
@@ -226,6 +231,12 @@ select * from v$block_change_tracking;
 
 -- enable block change tracking (BCT)
 ALTER DATABASE ENABLE BLOCK CHANGE TRACKING USING FILE '/database/Ecc3appsp/cc3appsp_admn01/admin/bct/bct.bt';
+
+-- spool the output (won't show onscreen)
+spool log to cdsgd_catalog.log
+list backup;
+list copy;
+spool log off
 
 
 -- ##########
