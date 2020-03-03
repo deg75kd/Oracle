@@ -39,6 +39,11 @@ select con_id, tablespace_name "TS", count(file_id) "FILES", (sum(bytes)/1024/10
 from cdb_temp_files 
 group by con_id, tablespace_name order by con_id, tablespace_name;
 
+-- size per mount for PDB
+col disk format a30
+select substr(file_name,1,instr(file_name,'/',-1)-1) disk, count(file_id) "FILES", (sum(bytes)/1024/1024) MB
+from cdb_temp_files where con_id=3
+group by substr(file_name,1,instr(file_name,'/',-1)-1) order by 1;
 
 
 -- all for a CDB

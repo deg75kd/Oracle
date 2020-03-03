@@ -112,6 +112,47 @@ end;
 
 (select name, passwordx as hash from sys.link$ where passwordx is not null)
 
+
+-- ######################
+-- # heterogenous links #
+-- ######################
+
+-- create link
+CREATE PUBLIC DATABASE LINK MAID
+CONNECT TO ORACLEMAID IDENTIFIED BY '&what_pwd'
+USING '(DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=lxorainfd01.conseco.ad)(PORT=1521))(CONNECT_DATA=(SID=dsgdtomaidprod))(HS=OK))';
+
+-- /app/oracle/product/gateway/12c/1/hs/admin/initdsgdtomaidprod.ora
+HS_FDS_CONNECT_INFO = DSGDTOMAIDPROD
+HS_FDS_TRACE_LEVEL = OFF
+HS_FDS_SHAREABLE_NAME = /usr/lib64/libodbc.so
+HS_FDS_TRACE_FILE_NAME = /app/oracle/product/gateway/12c/1/hs/admin/dsgdtomaidprod.trc
+set ODBCINI=/etc/odbc.ini
+set LIBPATH=/usr/lib64
+
+-- /etc/odbc.ini
+[DSGDTOMAIDPROD]
+Driver=ODBC Driver 13 for SQL Server
+Description=MSSQL Server
+Trace=No
+AutoTranslate=No
+Server=NTS8R2P05
+Database=MAID
+LogonID=OracleMaid
+Password=Nj6faszw
+Port=1433
+
+-- /app/oracle/tns_admin/listener.ora
+SID_LIST_LISTENER =
+  (SID_LIST =
+      (SID_DESC=
+         (SID_NAME=dsgptomaidprd)
+         (ORACLE_HOME=/app/oracle/product/gateway/12c/1)
+         (PROGRAM=dg4odbc)
+         (ENVS=LIBPATH=/usr/lib64:/app/oracle/product/gateway/12c/1)
+      )
+
+
 -- ##########
 -- # Errors #
 -- ##########

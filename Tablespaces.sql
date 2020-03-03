@@ -9,7 +9,7 @@ compute sum label "TOTAL" of files "MB" on report;
 select count(file_id) files, sum(bytes/1024/1024) "MB"
 from
 	(select file_id, bytes from dba_data_files
-	union
+	union all
 	select file_id, bytes from dba_temp_files)
 ;
 
@@ -20,7 +20,7 @@ compute sum label "TOTAL" of files "MB" "MaxB" on report;
 select count(file_id) files, sum(bytes/1024/1024) "MB"
 from
 	(select file_id, bytes from cdb_data_files
-	union
+	union all
 	select file_id, bytes from cdb_temp_files)
 ;
 
@@ -662,12 +662,13 @@ SPOOL OFF;
 @/tmp/rename_datafiles.out
 
 
+/************************ MOVING FILES ONLINE (12c) ************************************************************/
+
+ALTER DATABASE MOVE DATAFILE '/database/v122b8d01/oradata/users01.dbf'
+ TO '/database2/v122b8d02/oradata/users01.dbf';
 
 
-
-
-D:\ORADATA\DEVEM12\MGMT.DBF
-D:\ORADATA\DEVEM12\MGMT02.DBF
+/************************ MOVING OBJECTS ************************************************************/
 
 select 'ALTER TABLE '||owner||'.'||segment_name||' MOVE;'
    from dba_extents

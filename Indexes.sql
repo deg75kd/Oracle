@@ -116,10 +116,29 @@ order by di.index_name;
 
 -- get size of index
 col segment_name format a40
-col "KB" format 9,999,990
-select seg.segment_name, seg.segment_type, (seg.bytes/1024) "KB"
+col "MB" format 9,999,990
+select seg.segment_name, seg.segment_type, (seg.bytes/1024/1024) "MB"
 from dba_segments seg join dba_indexes ind on seg.segment_name=ind.index_name
 where seg.segment_type like '%INDEX%' and ind.index_name='&what_index';
+
+-- size of domain indexes
+COL table_name format A30;
+COL index_name format A30;
+col "MB" format 9,999,990
+select table_name, x.index_name, sum(MB) MB from 
+    (select substr(table_name, 4, instr(table_name, '$', -1)-4) index_name, sum(bytes)/1024/1024 MB
+     from dba_tables t, dba_segments s
+     where t.table_name = s.segment_name and t.table_name like 'DR$%$%'
+     group by substr(table_name, 4, instr(table_name, '$', -1)-4) 
+    union
+     select substr(table_name, 4, instr(table_name, '$', -1)-4) index_name, sum(bytes)/1024/1024 MB 
+	 from dba_indexes i, dba_segments s
+     where i.index_name = s.segment_name and i.table_name like 'DR$%$%'
+     group by substr(table_name, 4, instr(table_name, '$', -1)-4)
+) x, dba_indexes ind
+where x.index_name = ind.index_name
+group by table_Name, x.index_name
+order by table_name, x.index_name;
 
 -- get details of all extents of an index
 SELECT	f.block_id, --starting block # of extent

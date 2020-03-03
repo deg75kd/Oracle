@@ -68,12 +68,13 @@ set lines 150
 set pages 200
 col "Table" format a50
 col "GB" format 999,999,999
-SELECT	t.owner||'.'||t.table_name AS "Table", round(s.bytes/1024/1024/1024,0) "GB"
+SELECT	t.owner||'.'||t.table_name AS "Table", s.segment_type, sum(round(s.bytes/1024/1024/1024,0)) "GB"
 FROM	dba_segments s, dba_tables t
 WHERE	s.segment_type like 'TABLE%' AND s.segment_name=t.table_name
 	--AND s.bytes>=21474836480
 	AND t.table_name like '%&what_table%'
-ORDER BY s.bytes, t.owner, t.table_name;
+GROUP BY t.owner, t.table_name, s.segment_type
+ORDER BY t.owner, t.table_name, s.segment_type;
 
 -- find size in bytes of a column
 -- useful for numbers since they're variable sizes
@@ -835,7 +836,6 @@ ALTER TABLE employees DEALLOCATE UNUSED;
 -- move a table
 ALTER TABLE &what_table MOVE
 [TABLESPACE &what_tablespace]
-
 [PARALLEL x | NOPARALLEL];
 
 ALTER TABLE SYSMAN_MDS.MDS_ATTRIBUTES MOVE

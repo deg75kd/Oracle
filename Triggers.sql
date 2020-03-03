@@ -113,8 +113,8 @@ BEGIN
 	IF ( app_region = 'NY' ) THEN 
 		RAISE_APPLICATION_ERROR(-20001,'The system is not currently available for this region');
 	END IF; 
- END; 
- / 
+END; 
+/ 
 
 -- drop trigger (before)
 create or replace
