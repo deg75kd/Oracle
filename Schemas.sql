@@ -137,6 +137,9 @@ ALTER USER &what_user IDENTIFIED BY &pass_word PASSWORD EXPIRE;
 -- change a user to be externally authenticated
 ALTER USER &what_user IDENTIFIED EXTERNALLY;
 
+-- connect using password with @ in it
+sqlplus 'XXX_user/"x@yyyzzz"@//host:port/service'
+
 -- lock a user's account
 ALTER USER &what_user ACCOUNT LOCK;
 -- unlock/open a user's account
@@ -186,6 +189,13 @@ select 'ALTER USER '||username||' QUOTA '||
   end
   ||' ON '||tablespace_name||';'
 from dba_ts_quotas where username='&&what_user';
+
+set lines 150 pages 200
+set long 10000000
+COL "DDL"  FORMAT A1000
+select DBMS_METADATA.GET_GRANTED_DDL('ROLE_GRANT','&what_user') "DDL" from dual;
+select DBMS_METADATA.GET_GRANTED_DDL('SYSTEM_GRANT','&what_user') "DDL" from dual;
+select DBMS_METADATA.GET_GRANTED_DDL('OBJECT_GRANT','&what_user') "DDL" from dual;
 
 -- get grant role statement
 select 'GRANT '||granted_role||' TO '||grantee||';'

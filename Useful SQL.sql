@@ -78,6 +78,16 @@ set pages 0 lines 1000
 set trimspool on
 spool file.csv
 
+-- spool to html file
+SET MARKUP HTML ON SPOOL ON HEAD "<TITLE>ARCHIVED LOG GENERATION - INFO </title> - 
+<STYLE TYPE='TEXT/CSS'><!--BODY {background: ffffc6} --></STYLE>" 
+SET ECHO OFF
+SET PAGES 200
+col DAY format a6
+column filename new_val filename
+select '/tmp/'||name||'_ARCHIVED_LOGS_'||to_char(sysdate,'mondd')||'.html' filename from v$database;
+spool &filename
+
 -- run SQL without qualifying the owner name of objects
 ALTER SESSION SET CURRENT_SCHEMA = audit_gkpr;
 
@@ -313,6 +323,9 @@ select dbms_metadata.get_ddl('DB_LINK','&what_dblink','&what_owner') "DDL" from 
 select DBMS_METADATA.GET_DDL('TABLESPACE','&what_obj') "DDL" from dual;
 select DBMS_METADATA.GET_DDL('USER','&what_obj') "DDL" from dual;
 select DBMS_METADATA.GET_DDL('ROLE','&what_obj') "DDL" from dual;
+select DBMS_METADATA.GET_GRANTED_DDL('ROLE_GRANT','&what_user') "DDL" from dual;
+select DBMS_METADATA.GET_GRANTED_DDL('SYSTEM_GRANT','&what_user') "DDL" from dual;
+select DBMS_METADATA.GET_GRANTED_DDL('OBJECT_GRANT','&what_user') "DDL" from dual;
 
 set long 10000000
 COL "DDL"  FORMAT A1000

@@ -2,6 +2,13 @@
 -- # User Queries #
 -- ################
 
+set lines 150 pages 200
+set long 10000000
+COL "DDL"  FORMAT A1000
+select DBMS_METADATA.GET_GRANTED_DDL('ROLE_GRANT','&what_user') "DDL" from dual;
+select DBMS_METADATA.GET_GRANTED_DDL('SYSTEM_GRANT','&what_user') "DDL" from dual;
+select DBMS_METADATA.GET_GRANTED_DDL('OBJECT_GRANT','&what_user') "DDL" from dual;
+
 -- see all granted roles
 select * from user_role_privs;
 
