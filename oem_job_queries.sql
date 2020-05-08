@@ -334,40 +334,177 @@ where jeh.job_id=mj.job_id and jeh.status='Scheduled' and jeh.target_name is not
 mj.job_type='Backup'
 order by jeh.job_name;
 
--- attempting to find jobs run as specific user (doesn't work)
-select jeh.job_name, to_char(jeh.start_time,'DD-MON-YY HH24:MI') "START", jeh.status
-from SYSMAN.MGMT$JOB_EXECUTION_HISTORY jeh, SYSMAN.MGMT_JOB_CREDENTIALS jc
-where jeh.start_time between to_date('20131117 0000','YYYYMMDD HH24MI') and to_date('20131117 2359','YYYYMMDD HH24MI')
-and jeh.target_name='FLEXI9_agentflexi10g.prod.uk.acturis.com'
-and jeh.status IN ('Failed','Succeeded') and jc.user_name='FLX'
-order by jeh.job_name, jeh.start_time;
+-- report of RMAN backup job status over past week
+set lines 150 pages 200
+col target_name format a40
+select target_name, "JOB_NAME",
+  sum(decode( "JOB_STATUS", 'Succeeded', 1, 0)) "Succeeded",
+  sum(decode( "JOB_STATUS", 'Failed', 1, 0)) "Failed",
+  sum(decode( "JOB_STATUS", 'Skipped', 1, 0)) "Skipped",
+  sum(decode( "JOB_STATUS", 'n/a', 1, 0)) "No OEM Job"
+from (
+  select tgt.target_name, nvl(job_hist.job_name, 'n/a') "JOB_NAME", nvl(job_hist.status, 'n/a') "JOB_STATUS"
+  from (
+    select target_name, job_name, status
+    from SYSMAN.MGMT$JOB_EXECUTION_HISTORY jeh
+    where jeh.target_type like '%database%'
+    and jeh.job_type='Backup' and jeh.job_name like '%FULL%'
+    and jeh.start_time >= (sysdate-7)
+    and jeh.status not in ('Scheduled','Waiting')
+  ) job_hist
+  full outer join (
+    select TARGET_NAME
+    from SYSMAN.MGMT$TARGET
+    where TARGET_TYPE='oracle_database'
+  ) tgt
+  on tgt.target_name=job_hist.target_name
+)
+group by target_name, "JOB_NAME"
+having sum(decode( "JOB_STATUS", 'Succeeded', 1, 0))<4
+order by 1,2;
 
-select jeh.job_name, to_char(jeh.start_time,'DD-MON-YY HH24:MI') "START", jeh.status
-from SYSMAN.MGMT$JOB_EXECUTION_HISTORY jeh, SYSMAN.MGMT_JOB_CREDENTIALS jc
-where jeh.job_id=jc.job_id
-and jeh.start_time between to_date('20131117 0000','YYYYMMDD HH24MI') and to_date('20131117 2359','YYYYMMDD HH24MI')
-and jeh.target_name='FLEXI9_agentflexi10g.prod.uk.acturis.com'
-and jc.user_name='FLX'
-order by jeh.job_name, jeh.start_time;
 
-select job_id from SYSMAN.MGMT_JOB_CREDENTIALS where user_name='FLX';
+-- find jobs scheduled against OEM groups
+SET ECHO OFF;
+SET ESCAPE OFF;
+SET TRIMSPOOL ON;
+SET PAGES 0
+SET MARKUP HTML ON ENTMAP ON SPOOL ON PREFORMAT OFF;
+SPOOL /tmp/OEM_group_jobs.xls
+select jt.TARGET_NAME, jt.JOB_NAME
+from sysman.MGMT$JOB_TARGETS jt
+where jt.TARGET_TYPE='composite' and jt.JOB_TYPE='SQLScript'
+order by 1;
+spool off
 
--- show credentials for a given job (does not work)
-select ca.ca_name, ca.target_name, ca.start_time, ca.status, cr.credential_set_name
-from SYSMAN.MGMT$CA_EXECUTIONS ca, SYSMAN.MGMT_JOB_EXEC_CRED_INFO cr
---SYSMAN.EM_JOB_CREDENTIALS cr
-where ca.target_guid=cr.target_guid --and ca.execution_id=cr.execution_id
-and ca.target_name like '%CABC_FOM%'
-order by 1,2,3;
+-- find job scheduled with specific named credentials
+select JOB_NAME, CRED_NAME, TIER, count(TARGET_NAME) "TGT_CT"
+from (
+	select j.JOB_NAME, nc.CRED_NAME, jeh.TARGET_NAME,
+		case upper(substr(tgt.HOST_NAME,9,1))
+			when 'P' then 'PROD'
+			when 'Q' then 'UAT'
+			when 'M' then 'UAT'
+			when 'T' then 'SIT'
+			when 'D' then 'UT'
+			else '?'
+		end TIER
+	from SYSMAN.MGMT$JOBS j, 
+		SYSMAN.EM_JOB_CREDENTIALS jc, 
+		sysman.EM_NC_CREDS nc, 
+		SYSMAN.MGMT$JOB_EXECUTION_HISTORY jeh,
+		SYSMAN.MGMT$TARGET tgt
+	where j.JOB_ID=jc.JOB_ID and jc.CREDENTIAL_REF=nc.CRED_GUID and j.JOB_ID=jeh.JOB_ID and jeh.TARGET_GUID=tgt.TARGET_GUID
+	and nc.CRED_NAME in ('NC_DB_SYS','NC_DB_SYSTEM')
+	and jeh.STATUS in ('Running','Scheduled')
+) 
+group by JOB_NAME, CRED_NAME, TIER;
 
-and ca.status!='Succeeded';
+
+
+-- ###########
+-- # TARGETS #
+-- ###########
 
 -- list all DB targets
+set lines 150 pages 200
 col TARGET_NAME format a100
 select TARGET_NAME, HOST_NAME
 from SYSMAN.MGMT$TARGET
 where TARGET_TYPE in ('oracle_pdb','oracle_database')
 order by 1;
+
+-- DB targets plus other details
+col TARGET_NAME format a30
+col HOST_NAME format a20
+col TARGET_TYPE format a20
+col ROOT format a5
+col Department format a20
+col Lifecycle format a20
+col Version format a20
+
+SET ECHO OFF;
+SET ESCAPE OFF;
+SET TRIMSPOOL ON;
+SET PAGES 0
+SET MARKUP HTML ON ENTMAP ON SPOOL ON PREFORMAT OFF;
+SPOOL /tmp/OEM_DB_targets.xls
+
+SELECT upper(TARGET_NAME), upper(HOST_NAME), TIER, TARGET_TYPE,
+  max(decode( PROPERTY_NAME, 'IS_ROOT', PROPERTY_VALUE, null )) "ROOT",
+  max(decode( PROPERTY_NAME, 'orcl_gtp_department', PROPERTY_VALUE, null )) "Department",
+  max(decode( PROPERTY_NAME, 'orcl_gtp_lifecycle_status', PROPERTY_VALUE, null )) "Lifecycle",
+  max(decode( PROPERTY_NAME, 'orcl_gtp_target_version', PROPERTY_VALUE, null )) "Version"
+FROM (
+  select tgt.TARGET_NAME, 
+  	substr(tgt.HOST_NAME,1,instr(tgt.HOST_NAME,'.')-1) "HOST_NAME",
+  	case upper(substr(tgt.HOST_NAME,9,1))
+  		when 'P' then 'PROD'
+  		when 'Q' then 'FTSE'
+  		when 'M' then 'UAT'
+  		when 'T' then 'SIT'
+  		when 'D' then 'UT'
+  		else '?'
+  	end TIER,
+  	case tgt.TARGET_TYPE
+		when 'oracle_database' then 'instance'
+		when 'oracle_pdb' then 'PDB'
+		else '?'
+	end "TARGET_TYPE",
+	prp.PROPERTY_NAME, prp.PROPERTY_VALUE
+  from SYSMAN.MGMT$TARGET tgt, sysman.MGMT$TARGET_PROPERTIES prp
+  where tgt.TARGET_GUID=prp.TARGET_GUID
+  and tgt.TARGET_TYPE in ('oracle_pdb','oracle_database')
+  and prp.PROPERTY_NAME in ('orcl_gtp_department','orcl_gtp_lifecycle_status','orcl_gtp_target_version','IS_ROOT'))
+GROUP BY TARGET_NAME, HOST_NAME, TIER, TARGET_TYPE
+ORDER BY 1;
+spool off
+
+-- validate departments
+select TARGET_NAME, substr(HOST_NAME,1,instr(HOST_NAME,'.')-1) "HOST_NAME", PROPERTY_VALUE
+from (
+  select tgt.TARGET_NAME, tgt.HOST_NAME, upper(substr(tgt.HOST_NAME,6,3)) "HOST_DEPT", prp.PROPERTY_VALUE,
+    case 
+      when (upper(substr(tgt.HOST_NAME,6,3)) = prp.PROPERTY_VALUE) then ''
+  	else 'NO'
+    end "MATCH"
+  from SYSMAN.MGMT$TARGET tgt, sysman.MGMT$TARGET_PROPERTIES prp
+  where tgt.TARGET_GUID=prp.TARGET_GUID
+    and tgt.TARGET_TYPE in ('oracle_pdb','oracle_database')
+    and prp.PROPERTY_NAME='orcl_gtp_department'
+)
+where MATCH='NO'
+order by 1;
+TARGET_NAME                    HOST_NAME            PROPERTY_VALUE
+------------------------------ -------------------- --------------------
+CAEDBT_AEDBT                   lxorainft01          FIN
+CIDEVT                         LXORACPNT01
+CIDWT                          lxoradwst01
+
+-- validate lifecycle status
+select TARGET_NAME, PROPERTY_VALUE
+from (
+  select tgt.TARGET_NAME, 
+  	tgt.HOST_NAME,
+    	case upper(substr(tgt.HOST_NAME,9,1))
+    		when 'P' then 'Production'
+    		when 'Q' then 'Stage'
+    		when 'M' then 'Stage'
+    		when 'T' then 'Test'
+    		when 'D' then 'Development'
+    		else '?'
+    	end TIER,
+  	prp.PROPERTY_VALUE
+  from SYSMAN.MGMT$TARGET tgt, sysman.MGMT$TARGET_PROPERTIES prp
+  where tgt.TARGET_GUID=prp.TARGET_GUID
+    --and upper(tgt.TARGET_NAME) like '%BPA%'
+    and tgt.TARGET_TYPE in ('oracle_pdb','oracle_database')
+    and prp.PROPERTY_NAME='orcl_gtp_lifecycle_status'
+)
+where TIER != PROPERTY_VALUE
+order by 1;
+no rows selected
+
 
 
 SYSMAN.EM_JOB_CREDENTIALS
@@ -571,3 +708,8 @@ from
    where status='Succeeded' and job_type in ('OSCommand','SQLScript','RMANScript')
 );
 spool off
+
+
+
+
+
